@@ -447,6 +447,7 @@ Cite Slack evidence inline as `[ISO8601Z @name]` when helpful. End with the Vali
     async function loadChannels(){
       statusEl.textContent = 'Loading Slack channels…';
       console.log('Starting to load channels...');
+      console.log('channelSel element:', channelSel);
       try{
         const r = await fetch('/api/channels');
         console.log('Fetch response status:', r.status, r.ok);
