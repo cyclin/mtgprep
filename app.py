@@ -323,7 +323,18 @@ INDEX_HTML = """
     textarea{width:100%; height:160px}
     button{padding:10px 14px; border-radius:8px; border:0; background:#111; color:white; cursor:pointer}
     button[disabled]{opacity:0.5; cursor:not-allowed}
-    #out{white-space:pre-wrap; border:1px dashed #aaa; padding:12px; border-radius:8px; margin-top:16px}
+    #out{border:1px dashed #aaa; padding:12px; border-radius:8px; margin-top:16px; line-height:1.6}
+    #out h1, #out h2, #out h3{margin-top:20px; margin-bottom:10px; color:#333}
+    #out h1{font-size:1.5em; border-bottom:2px solid #333}
+    #out h2{font-size:1.3em; border-bottom:1px solid #666}
+    #out h3{font-size:1.1em}
+    #out ul, #out ol{margin:10px 0; padding-left:20px}
+    #out li{margin:5px 0}
+    #out p{margin:10px 0}
+    #out strong{font-weight:600; color:#222}
+    #out code{background:#f5f5f5; padding:2px 4px; border-radius:3px; font-family:monospace}
+    #out pre{background:#f5f5f5; padding:10px; border-radius:5px; overflow-x:auto; margin:10px 0}
+    #out blockquote{border-left:4px solid #ddd; padding-left:16px; margin:10px 0; font-style:italic}
     .muted{color:#666; font-size:12px}
   </style>
 </head>
@@ -383,6 +394,27 @@ Be candid about unknowns and end with a validation checklist.</textarea>
     const out = document.getElementById('out');
     const statusEl = document.getElementById('status');
 
+    function parseMarkdown(text) {
+      return text
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/^\* (.*$)/gim, '<li>$1</li>')
+        .replace(/^- (.*$)/gim, '<li>$1</li>')
+        .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/`(.*?)`/gim, '<code>$1</code>')
+        .replace(/\n\n/gim, '</p><p>')
+        .replace(/^(?!<[hlu])/gim, '<p>')
+        .replace(/(<\/li>\s*)+/gim, '</li>')
+        .replace(/(<li>.*<\/li>)/gims, '<ul>$1</ul>')
+        .replace(/<\/ul>\s*<ul>/gim, '')
+        .replace(/(<p><\/p>)/gim, '')
+        .replace(/^<p>(<h[123]>)/gim, '$1')
+        .replace(/(<\/h[123]>)<\/p>$/gim, '$1');
+    }
+
     async function loadChannels(){
       statusEl.textContent = 'Loading Slack channels…';
       try{
@@ -421,7 +453,8 @@ Be candid about unknowns and end with a validation checklist.</textarea>
         const data = await r.json();
         if(!r.ok){ throw new Error(data.detail || JSON.stringify(data)); }
         statusEl.textContent = 'Done.';
-        out.textContent = data.brief_markdown || '(no output)';
+        const markdown = data.brief_markdown || '(no output)';
+        out.innerHTML = parseMarkdown(markdown);
       }catch(e){
         statusEl.textContent = 'Error: ' + (e && e.message ? e.message : e);
       }finally{
