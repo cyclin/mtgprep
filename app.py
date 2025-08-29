@@ -447,10 +447,16 @@ async def index() -> str:
 @app.get("/api/channels")
 async def api_channels() -> JSONResponse:
     channels = await list_channels(limit=400)
+    # Filter for channels starting with "bd-" or "internal-" and exclude archived
+    filtered_channels = [
+        c for c in channels 
+        if not c.get("is_archived", False) and 
+        c.get("name", "").startswith(("bd-", "internal-"))
+    ]
     # Trim the payload for UI
     result = [
         {"id": c.get("id"), "name": c.get("name"), "is_private": bool(c.get("is_private"))}
-        for c in channels
+        for c in filtered_channels
     ]
     return JSONResponse({"channels": result})
 
