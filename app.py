@@ -424,24 +424,45 @@ Cite Slack evidence inline as `[ISO8601Z @name]` when helpful. End with the Vali
     const statusEl = document.getElementById('status');
 
     function parseMarkdown(text) {
-      return text
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-        .replace(/^\* (.*$)/gim, '<li>$1</li>')
-        .replace(/^- (.*$)/gim, '<li>$1</li>')
-        .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
-        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-        .replace(/`(.*?)`/gim, '<code>$1</code>')
-        .replace(/\n\n/gim, '</p><p>')
-        .replace(/^(?!<[hlu])/gim, '<p>')
-        .replace(/(<\/li>\s*)+/gim, '</li>')
-        .replace(/(<li>.*<\/li>)/gims, '<ul>$1</ul>')
-        .replace(/<\/ul>\s*<ul>/gim, '')
-        .replace(/(<p><\/p>)/gim, '')
-        .replace(/^<p>(<h[123]>)/gim, '$1')
-        .replace(/(<\/h[123]>)<\/p>$/gim, '$1');
+      // Simple markdown parser to avoid regex escaping issues
+      let lines = text.split('\\n');
+      let html = [];
+      let inList = false;
+      
+      for (let line of lines) {
+        if (line.startsWith('### ')) {
+          html.push('<h3>' + line.substring(4) + '</h3>');
+        } else if (line.startsWith('## ')) {
+          html.push('<h2>' + line.substring(3) + '</h2>');
+        } else if (line.startsWith('# ')) {
+          html.push('<h1>' + line.substring(2) + '</h1>');
+        } else if (line.startsWith('- ') || line.startsWith('* ')) {
+          if (!inList) {
+            html.push('<ul>');
+            inList = true;
+          }
+          html.push('<li>' + line.substring(2) + '</li>');
+        } else if (line.match(/^\\d+\\. /)) {
+          if (!inList) {
+            html.push('<ol>');
+            inList = true;
+          }
+          html.push('<li>' + line.replace(/^\\d+\\. /, '') + '</li>');
+        } else {
+          if (inList) {
+            html.push('</ul>');
+            inList = false;
+          }
+          if (line.trim()) {
+            line = line.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
+            line = line.replace(/\\*(.*?)\\*/g, '<em>$1</em>');
+            line = line.replace(/`(.*?)`/g, '<code>$1</code>');
+            html.push('<p>' + line + '</p>');
+          }
+        }
+      }
+      if (inList) html.push('</ul>');
+      return html.join('');
     }
 
     async function loadChannels(){
