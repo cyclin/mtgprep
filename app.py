@@ -446,10 +446,13 @@ Cite Slack evidence inline as `[ISO8601Z @name]` when helpful. End with the Vali
 
     async function loadChannels(){
       statusEl.textContent = 'Loading Slack channels…';
+      console.log('Starting to load channels...');
       try{
         const r = await fetch('/api/channels');
+        console.log('Fetch response status:', r.status, r.ok);
         if(!r.ok){ throw new Error(await r.text()); }
         const data = await r.json();
+        console.log('Channels data received:', data);
         channelSel.innerHTML = '';
         data.channels.forEach(c => {
           const opt = document.createElement('option');
@@ -457,8 +460,10 @@ Cite Slack evidence inline as `[ISO8601Z @name]` when helpful. End with the Vali
           opt.textContent = (c.is_private ? '🔒 ' : '# ') + (c.name || c.id);
           channelSel.appendChild(opt);
         });
+        console.log('Added', data.channels.length, 'channels to dropdown');
         statusEl.textContent = '';
       }catch(e){
+        console.error('Channel loading error:', e);
         statusEl.textContent = 'Failed to load channels: ' + (e && e.message ? e.message : e);
       }
     }
