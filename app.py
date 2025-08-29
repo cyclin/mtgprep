@@ -444,6 +444,25 @@ Be candid about unknowns and end with a validation checklist.</textarea>
 async def index() -> str:
     return INDEX_HTML
 
+@app.get("/api/test-hubspot")
+async def test_hubspot(emails: str = "test@example.com") -> JSONResponse:
+    """Test HubSpot integration independently"""
+    email_list = [e.strip() for e in emails.split(",") if e.strip()]
+    try:
+        if not HUBSPOT_TOKEN:
+            return JSONResponse({"status": "error", "message": "HubSpot token not configured"})
+        
+        contacts = await fetch_contacts_by_email(email_list)
+        return JSONResponse({
+            "status": "success", 
+            "hubspot_configured": bool(HUBSPOT_TOKEN),
+            "emails_tested": email_list,
+            "contacts_found": len(contacts),
+            "contacts": contacts
+        })
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)})
+
 @app.get("/api/channels")
 async def api_channels() -> JSONResponse:
     channels = await list_channels(limit=400)
