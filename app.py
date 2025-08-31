@@ -94,34 +94,45 @@ Guardrails
 - Ground all claims in evidence from the research provided. Cite sources when helpful.
 - Prefer structured analysis over narrative; use bullets and clear sections.
 - When making strategic assumptions, label them clearly and provide reasoning.
+- Pay special attention to attendee profiles and tailor recommendations to their specific backgrounds and priorities.
 
 Output (Markdown, use these headings exactly)
 1) Executive Summary
    • 3-5 bullets capturing the key strategic opportunity, their current state, and our positioning advantage.
 2) Target Company Intelligence
    • Business model, recent performance, strategic priorities, digital transformation initiatives.
-3) Key Executive Profiles
-   • For each key attendee: Background, career progression, likely priorities, decision-making style, previous company experience.
+3) Meeting Attendee Analysis
+   • For each attendee: Background, career progression, likely priorities, decision-making style, LinkedIn profile insights, and how to engage them effectively.
+   • Include HubSpot relationship history if available.
+   • Identify the key decision-maker and influencers in the group.
 4) Competitive Landscape Analysis
    • How they compare to industry leaders, gaps we've identified, transformation maturity.
 5) Strategic Opportunity Assessment
    • Specific areas where CROmetrics can add value, backed by evidence from research.
-6) Meeting Objectives & Success Metrics
-   • What we need to accomplish, how to measure meeting success, next steps to secure.
+   • Map opportunities to specific attendee interests and company priorities.
+6) Meeting Dynamics & Strategy
+   • How to navigate the group dynamic based on attendee profiles.
+   • Recommended meeting flow and who to address for different topics.
+   • Potential coalition-building opportunities among attendees.
 7) Key Questions to Ask
    • Strategic questions that demonstrate our expertise and uncover decision criteria.
+   • Personalized questions for each key attendee based on their background.
 8) Potential Objections & Responses
-   • Likely pushback and how to address it, competitive threats to acknowledge.
+   • Likely pushback from each attendee type and how to address it.
+   • Competitive threats to acknowledge and counter.
 9) Follow-up Action Plan
    • Specific next steps, timeline, and deliverables to propose.
+   • Individual follow-up strategies for each attendee.
 10) Research Validation Needed
     • Facts to confirm, additional research priorities, intelligence gaps to fill.
+    • Missing attendee information that could impact strategy.
 
 Quality check (perform silently):
 - Does the analysis demonstrate deep understanding of their business challenges?
 - Are our value propositions specific and differentiated?
 - Do questions and recommendations reflect senior-level strategic thinking?
 - Are we positioned as consultative partners, not just vendors?
+- Have we adequately addressed the multi-attendee dynamic and personalized our approach?
 """
 
 BD_DEFAULT_PROMPT = """
@@ -129,6 +140,8 @@ Create a strategic business development intelligence report using the research p
 Focus on identifying specific opportunities where CROmetrics can drive measurable business impact.
 Base all analysis on the research context provided. Mark gaps as **Unknown** and prioritize additional research needs.
 Position CROmetrics as the strategic partner who understands their business and can accelerate their transformation goals.
+
+Pay special attention to the individual attendee profiles and tailor your strategic recommendations to address each person's likely priorities and concerns. Consider how the group dynamic might influence decision-making and recommend specific approaches for engaging each attendee effectively.
 """
 
 ###############################################
@@ -484,6 +497,107 @@ async def research_competitive_landscape(company_name: str, industry: str = "") 
     
     results = await web_search(query, 8)
     return results
+
+async def research_attendee_linkedin(name: str, company_name: str, title: str = "") -> Optional[str]:
+    """Search for attendee's LinkedIn profile URL."""
+    if not name or not company_name:
+        return None
+    
+    # Construct search query for LinkedIn
+    query_parts = [name, company_name, "linkedin"]
+    if title:
+        query_parts.insert(-1, title)
+    
+    query = " ".join(query_parts)
+    
+    try:
+        results = await web_search(query, 5)
+        
+        # Look for LinkedIn URLs in the results
+        for result in results:
+            link = result.get('link', '')
+            title = result.get('title', '').lower()
+            snippet = result.get('snippet', '').lower()
+            
+            # Check if this is a LinkedIn profile
+            if 'linkedin.com/in/' in link:
+                # Verify it's likely the right person by checking name in title/snippet
+                name_parts = name.lower().split()
+                if len(name_parts) >= 2:
+                    first_name = name_parts[0]
+                    last_name = name_parts[-1]
+                    
+                    # Check if both first and last name appear in title or snippet
+                    if (first_name in title or first_name in snippet) and \
+                       (last_name in title or last_name in snippet):
+                        return link
+        
+        return None
+    except Exception:
+        return None
+
+async def research_attendee_background(name: str, company_name: str, title: str = "", linkedin_url: str = "") -> Dict[str, Any]:
+    """Research attendee's professional background and experience."""
+    research_data = {
+        "name": name,
+        "title": title,
+        "company": company_name,
+        "linkedin_url": linkedin_url,
+        "background_info": [],
+        "career_highlights": [],
+        "expertise_areas": []
+    }
+    
+    if not name:
+        return research_data
+    
+    # Search for professional background
+    background_query = f"{name} {company_name} background experience career"
+    if title:
+        background_query += f" {title}"
+    
+    try:
+        background_results = await web_search(background_query, 3)
+        research_data["background_info"] = background_results
+        
+        # Search for specific expertise and achievements
+        expertise_query = f"{name} {company_name} expertise achievements awards"
+        expertise_results = await web_search(expertise_query, 2)
+        research_data["career_highlights"] = expertise_results
+        
+    except Exception:
+        pass  # Continue even if research fails
+    
+    return research_data
+
+async def create_hubspot_contact(attendee_data: Dict[str, Any]) -> Optional[str]:
+    """Create a new contact in HubSpot and return the contact ID."""
+    if not HUBSPOT_TOKEN:
+        return None
+    
+    try:
+        properties = {
+            "firstname": attendee_data.get("name", "").split()[0] if attendee_data.get("name") else "",
+            "lastname": " ".join(attendee_data.get("name", "").split()[1:]) if attendee_data.get("name") and len(attendee_data.get("name", "").split()) > 1 else "",
+            "jobtitle": attendee_data.get("title", ""),
+            "company": attendee_data.get("company", ""),
+        }
+        
+        # Add email if available
+        if attendee_data.get("email"):
+            properties["email"] = attendee_data["email"]
+        
+        # Add LinkedIn URL if available
+        if attendee_data.get("linkedin_url"):
+            properties["linkedin_url"] = attendee_data["linkedin_url"]
+        
+        payload = {"properties": properties}
+        
+        response = await hubspot_post("/crm/v3/objects/contacts", payload)
+        return response.get("id")
+        
+    except Exception:
+        return None
 
 ###############################################
 # OpenAI (o3) call
@@ -1173,6 +1287,29 @@ BD_INDEX_HTML = """
       transform: none;
     }
 
+    button.secondary{
+      background: var(--cro-plat-300);
+      color: var(--cro-soft-black-700);
+      font-size: 0.9rem;
+      padding: 0.5rem 1rem;
+    }
+
+    button.secondary:hover{
+      background: var(--cro-plat-400);
+    }
+
+    button.remove{
+      background: var(--cro-red-500);
+      color: var(--cro-white);
+      font-size: 0.8rem;
+      padding: 0.4rem 0.8rem;
+      margin-left: 0.5rem;
+    }
+
+    button.remove:hover{
+      background: var(--cro-red-600);
+    }
+
     .row{
       display: flex;
       gap: 1.5rem;
@@ -1195,6 +1332,62 @@ BD_INDEX_HTML = """
       padding: 2rem;
       margin: 1rem 0;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .attendees-section {
+      background: var(--cro-blue-100);
+      border: 1px solid var(--cro-blue-200);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 1rem 0;
+    }
+
+    .attendee-item {
+      background: var(--cro-white);
+      border: 1px solid var(--cro-plat-300);
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 0.5rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .attendee-fields {
+      display: grid;
+      grid-template-columns: 2fr 2fr 1fr;
+      gap: 1rem;
+      flex: 1;
+    }
+
+    .attendee-status {
+      font-size: 0.8rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      margin-left: 1rem;
+    }
+
+    .status-unknown {
+      background: var(--cro-yellow-100);
+      color: var(--cro-yellow-700);
+    }
+
+    .status-found {
+      background: var(--cro-green-100);
+      color: var(--cro-green-700);
+    }
+
+    .status-new {
+      background: var(--cro-blue-100);
+      color: var(--cro-blue-700);
+    }
+
+    .hubspot-options {
+      background: var(--cro-green-100);
+      border: 1px solid var(--cro-green-200);
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 1rem 0;
     }
 
     #out{
@@ -1299,6 +1492,10 @@ BD_INDEX_HTML = """
         min-width: auto; 
       }
       
+      .attendee-fields {
+        grid-template-columns: 1fr;
+      }
+      
       h1 { 
         font-size: 2rem; 
       }
@@ -1325,17 +1522,6 @@ BD_INDEX_HTML = """
         <input id="company" type="text" placeholder="Chobani" />
       </div>
       <div>
-        <label for="executive">Key Executive Name</label>
-        <input id="executive" type="text" placeholder="Pavi Gupta" />
-      </div>
-      <div>
-        <label for="title">Executive Title</label>
-        <input id="title" type="text" placeholder="VP of Analytics and Insights" />
-      </div>
-    </div>
-
-    <div class="row">
-      <div>
         <label for="industry">Industry (optional)</label>
         <input id="industry" type="text" placeholder="CPG, Food & Beverage" />
       </div>
@@ -1346,6 +1532,29 @@ BD_INDEX_HTML = """
           <option value="medium">Standard</option>
           <option value="low">Quick</option>
         </select>
+      </div>
+    </div>
+
+    <div class="attendees-section">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <label style="margin: 0; font-size: 1.1rem;">Meeting Attendees</label>
+        <button type="button" class="secondary" onclick="addAttendee()">+ Add Attendee</button>
+      </div>
+      <div class="muted" style="margin-bottom: 1rem;">Add all meeting attendees for comprehensive research and LinkedIn discovery.</div>
+      
+      <div id="attendees-list">
+        <!-- Attendees will be added here dynamically -->
+      </div>
+      
+      <div class="hubspot-options">
+        <label>
+          <input type="checkbox" id="check-hubspot" checked> Check HubSpot for existing contacts
+        </label>
+        <br>
+        <label style="margin-top: 0.5rem;">
+          <input type="checkbox" id="add-to-hubspot"> Add new attendees to HubSpot after research
+        </label>
+        <div class="muted" style="margin-top: 0.5rem;">Requires HubSpot token to be configured</div>
       </div>
     </div>
 
@@ -1377,6 +1586,67 @@ Position CROmetrics as the strategic partner who understands their business and 
     const statusEl = document.getElementById('status');
     const progressEl = document.getElementById('research-progress');
     const progressSteps = document.getElementById('progress-steps');
+    let attendeeCounter = 0;
+
+    function addAttendee(name = '', title = '', email = '') {
+      attendeeCounter++;
+      const attendeesList = document.getElementById('attendees-list');
+      
+      const attendeeDiv = document.createElement('div');
+      attendeeDiv.className = 'attendee-item';
+      attendeeDiv.id = `attendee-${attendeeCounter}`;
+      
+      attendeeDiv.innerHTML = `
+        <div class="attendee-fields">
+          <input type="text" placeholder="Full Name" value="${name}" data-field="name">
+          <input type="text" placeholder="Title/Role" value="${title}" data-field="title">
+          <input type="email" placeholder="Email (optional)" value="${email}" data-field="email">
+        </div>
+        <div class="attendee-status status-unknown" id="status-${attendeeCounter}">Unknown</div>
+        <button type="button" class="remove" onclick="removeAttendee(${attendeeCounter})">Remove</button>
+      `;
+      
+      attendeesList.appendChild(attendeeDiv);
+      
+      if (attendeesList.children.length === 1) {
+        // First attendee, don't allow removal
+        attendeeDiv.querySelector('.remove').style.display = 'none';
+      }
+    }
+
+    function removeAttendee(id) {
+      const attendeeDiv = document.getElementById(`attendee-${id}`);
+      if (attendeeDiv) {
+        attendeeDiv.remove();
+      }
+      
+      // If only one attendee left, hide its remove button
+      const attendeesList = document.getElementById('attendees-list');
+      if (attendeesList.children.length === 1) {
+        attendeesList.querySelector('.remove').style.display = 'none';
+      }
+    }
+
+    function getAttendees() {
+      const attendees = [];
+      const attendeeItems = document.querySelectorAll('.attendee-item');
+      
+      attendeeItems.forEach(item => {
+        const name = item.querySelector('[data-field="name"]').value.trim();
+        const title = item.querySelector('[data-field="title"]').value.trim();
+        const email = item.querySelector('[data-field="email"]').value.trim();
+        
+        if (name) {
+          attendees.push({
+            name: name,
+            title: title,
+            email: email
+          });
+        }
+      });
+      
+      return attendees;
+    }
 
     function parseMarkdown(text) {
       // Simple markdown parser
@@ -1435,17 +1705,23 @@ Position CROmetrics as the strategic partner who understands their business and 
       document.getElementById('run').disabled = true;
       
       try{
+        const attendees = getAttendees();
+        if (attendees.length === 0) {
+          throw new Error('Please add at least one attendee');
+        }
+
         const body = {
           company_name: document.getElementById('company').value,
-          executive_name: document.getElementById('executive').value,
-          executive_title: document.getElementById('title').value,
           industry: document.getElementById('industry').value,
           meeting_context: document.getElementById('meeting_context').value,
           effort: document.getElementById('effort').value,
           prompt: document.getElementById('prompt').value,
+          attendees: attendees,
+          check_hubspot: document.getElementById('check-hubspot').checked,
+          add_to_hubspot: document.getElementById('add-to-hubspot').checked
         };
         
-        updateProgress('Initiating company research...');
+        updateProgress('Initiating company and attendee research...');
         
         const r = await fetch('/api/bd/generate', {
           method:'POST', 
@@ -1474,6 +1750,9 @@ Position CROmetrics as the strategic partner who understands their business and 
       }
     }
 
+    // Initialize with one attendee
+    addAttendee();
+    
     document.getElementById('run').addEventListener('click', run);
   </script>
 </body>
@@ -1516,20 +1795,99 @@ async def api_bd_generate(req: Request) -> JSONResponse:
     if not company_name:
         raise HTTPException(status_code=400, detail="company_name is required")
 
-    executive_name = (payload.get("executive_name") or "").strip()
-    executive_title = (payload.get("executive_title") or "").strip()
+    # Handle both old single-attendee format and new multiple-attendee format
+    attendees_data = payload.get("attendees", [])
+    if not attendees_data:
+        # Fallback to old format for backwards compatibility
+        executive_name = (payload.get("executive_name") or "").strip()
+        executive_title = (payload.get("executive_title") or "").strip()
+        if executive_name:
+            attendees_data = [{"name": executive_name, "title": executive_title, "email": ""}]
+
+    if not attendees_data:
+        raise HTTPException(status_code=400, detail="At least one attendee is required")
+
     industry = (payload.get("industry") or "").strip()
     meeting_context = (payload.get("meeting_context") or "").strip()
     effort = (payload.get("effort") or "high").lower()
     prompt = (payload.get("prompt") or BD_DEFAULT_PROMPT).strip()
+    check_hubspot = payload.get("check_hubspot", True)
+    add_to_hubspot = payload.get("add_to_hubspot", False)
 
     # 1) Company research
-    research_data = await research_company(company_name, executive_name)
+    # Use the first attendee's name for legacy company research
+    primary_attendee = attendees_data[0]
+    research_data = await research_company(company_name, primary_attendee.get("name", ""))
     
     # 2) Competitive landscape research
     competitive_data = await research_competitive_landscape(company_name, industry)
     
-    # 3) Format research context
+    # 3) Attendee research and LinkedIn discovery
+    enriched_attendees = []
+    hubspot_contacts = []
+    
+    # Check HubSpot for existing contacts if requested
+    if check_hubspot and HUBSPOT_TOKEN:
+        attendee_emails = [a.get("email") for a in attendees_data if a.get("email")]
+        if attendee_emails:
+            try:
+                hubspot_contacts = await fetch_contacts_by_email(attendee_emails)
+            except Exception:
+                hubspot_contacts = []
+    
+    for attendee in attendees_data:
+        name = attendee.get("name", "").strip()
+        title = attendee.get("title", "").strip()
+        email = attendee.get("email", "").strip()
+        
+        if not name:
+            continue
+            
+        enriched_attendee = {
+            "name": name,
+            "title": title,
+            "email": email,
+            "company": company_name,
+            "linkedin_url": None,
+            "hubspot_contact": None,
+            "background_research": None
+        }
+        
+        # Check if this attendee exists in HubSpot
+        if email and hubspot_contacts:
+            for contact in hubspot_contacts:
+                if contact.get("email", "").lower() == email.lower():
+                    enriched_attendee["hubspot_contact"] = contact
+                    enriched_attendee["linkedin_url"] = contact.get("linkedin_url")
+                    break
+        
+        # LinkedIn discovery if not already found in HubSpot
+        if not enriched_attendee["linkedin_url"]:
+            linkedin_url = await research_attendee_linkedin(name, company_name, title)
+            enriched_attendee["linkedin_url"] = linkedin_url
+        
+        # Background research
+        background_data = await research_attendee_background(
+            name, company_name, title, enriched_attendee["linkedin_url"] or ""
+        )
+        enriched_attendee["background_research"] = background_data
+        
+        # Create HubSpot contact if requested and attendee not found
+        if add_to_hubspot and not enriched_attendee["hubspot_contact"] and HUBSPOT_TOKEN:
+            contact_data = {
+                "name": name,
+                "title": title,
+                "email": email,
+                "company": company_name,
+                "linkedin_url": enriched_attendee["linkedin_url"]
+            }
+            contact_id = await create_hubspot_contact(contact_data)
+            if contact_id:
+                enriched_attendee["hubspot_contact"] = {"id": contact_id, "created": True}
+        
+        enriched_attendees.append(enriched_attendee)
+    
+    # 4) Format research context
     research_sections = []
     
     # Company overview
@@ -1544,14 +1902,6 @@ async def api_bd_generate(req: Request) -> JSONResponse:
     if research_data.get("recent_news"):
         research_sections.append("## Recent News & Developments")
         for item in research_data["recent_news"]:
-            research_sections.append(f"**{item.get('title', 'N/A')}**")
-            research_sections.append(f"Source: {item.get('link', 'N/A')}")
-            research_sections.append(f"{item.get('snippet', 'No snippet available')}\n")
-    
-    # Executive information
-    if research_data.get("executive_info") and executive_name:
-        research_sections.append(f"## Executive Profile: {executive_name}")
-        for item in research_data["executive_info"]:
             research_sections.append(f"**{item.get('title', 'N/A')}**")
             research_sections.append(f"Source: {item.get('link', 'N/A')}")
             research_sections.append(f"{item.get('snippet', 'No snippet available')}\n")
@@ -1572,6 +1922,39 @@ async def api_bd_generate(req: Request) -> JSONResponse:
             research_sections.append(f"Source: {item.get('link', 'N/A')}")
             research_sections.append(f"{item.get('snippet', 'No snippet available')}\n")
     
+    # Attendee profiles
+    if enriched_attendees:
+        research_sections.append("## Meeting Attendee Profiles")
+        for attendee in enriched_attendees:
+            research_sections.append(f"### {attendee['name']}")
+            research_sections.append(f"**Title:** {attendee['title'] or 'Not specified'}")
+            research_sections.append(f"**Email:** {attendee['email'] or 'Not provided'}")
+            if attendee['linkedin_url']:
+                research_sections.append(f"**LinkedIn:** {attendee['linkedin_url']}")
+            
+            if attendee['hubspot_contact']:
+                contact = attendee['hubspot_contact']
+                if contact.get('created'):
+                    research_sections.append("**HubSpot Status:** New contact created")
+                else:
+                    research_sections.append(f"**HubSpot Status:** Existing contact found (ID: {contact.get('id', 'N/A')})")
+            
+            # Include background research
+            if attendee['background_research']:
+                bg_research = attendee['background_research']
+                if bg_research.get('background_info'):
+                    research_sections.append("**Professional Background:**")
+                    for item in bg_research['background_info'][:2]:  # Limit to top 2 results
+                        research_sections.append(f"- {item.get('title', 'N/A')}")
+                        research_sections.append(f"  {item.get('snippet', 'No snippet available')}")
+                
+                if bg_research.get('career_highlights'):
+                    research_sections.append("**Career Highlights:**")
+                    for item in bg_research['career_highlights'][:1]:  # Limit to top result
+                        research_sections.append(f"- {item.get('snippet', 'No information available')}")
+            
+            research_sections.append("")  # Add spacing between attendees
+    
     # Competitive landscape
     if competitive_data:
         research_sections.append("## Competitive Landscape Analysis")
@@ -1582,23 +1965,27 @@ async def api_bd_generate(req: Request) -> JSONResponse:
 
     research_context = "\n".join(research_sections) if research_sections else "No research data available."
     
-    # 4) Compose full context
+    # 5) Compose full context
+    attendee_summary = ", ".join([f"{a['name']} ({a['title'] or 'Title TBD'})" for a in enriched_attendees])
     composed_context = (
         f"TARGET COMPANY: {company_name}\n"
-        f"KEY EXECUTIVE: {executive_name} - {executive_title}\n"
+        f"MEETING ATTENDEES: {attendee_summary}\n"
         f"INDUSTRY: {industry or 'Not specified'}\n"
         f"MEETING CONTEXT: {meeting_context or 'Not provided'}\n\n"
         f"RESEARCH INTELLIGENCE:\n{research_context}"
     )
 
-    # 5) Generate BD intelligence report
+    # 6) Generate BD intelligence report
     report = await asyncio.wait_for(ask_o3_bd(prompt, composed_context, effort=effort), timeout=300.0)
 
     return JSONResponse({
         "report_markdown": report,
         "meta": {
             "company_name": company_name,
-            "executive_name": executive_name,
+            "attendees_researched": len(enriched_attendees),
+            "linkedin_urls_found": sum(1 for a in enriched_attendees if a["linkedin_url"]),
+            "hubspot_contacts_found": sum(1 for a in enriched_attendees if a["hubspot_contact"] and not a["hubspot_contact"].get("created")),
+            "hubspot_contacts_created": sum(1 for a in enriched_attendees if a["hubspot_contact"] and a["hubspot_contact"].get("created")),
             "research_sections": len(research_sections),
             "effort": effort,
         }
