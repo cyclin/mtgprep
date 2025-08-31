@@ -498,10 +498,10 @@ async def research_competitive_landscape(company_name: str, industry: str = "") 
     results = await web_search(query, 8)
     return results
 
-async def research_attendee_linkedin(name: str, company_name: str, title: str = "") -> Optional[str]:
-    """Search for attendee's LinkedIn profile URL."""
+async def research_attendee_linkedin(name: str, company_name: str, title: str = "") -> Dict[str, Optional[str]]:
+    """Search for attendee's LinkedIn profile URL and snippet."""
     if not name or not company_name:
-        return None
+        return {"url": None, "snippet": None, "title": None}
     
     # Construct search query for LinkedIn
     query_parts = [name, company_name, "linkedin"]
@@ -516,8 +516,8 @@ async def research_attendee_linkedin(name: str, company_name: str, title: str = 
         # Look for LinkedIn URLs in the results
         for result in results:
             link = result.get('link', '')
-            title = result.get('title', '').lower()
-            snippet = result.get('snippet', '').lower()
+            result_title = result.get('title', '')
+            snippet = result.get('snippet', '')
             
             # Check if this is a LinkedIn profile
             if 'linkedin.com/in/' in link:
@@ -528,13 +528,20 @@ async def research_attendee_linkedin(name: str, company_name: str, title: str = 
                     last_name = name_parts[-1]
                     
                     # Check if both first and last name appear in title or snippet
-                    if (first_name in title or first_name in snippet) and \
-                       (last_name in title or last_name in snippet):
-                        return link
+                    title_lower = result_title.lower()
+                    snippet_lower = snippet.lower()
+                    
+                    if (first_name in title_lower or first_name in snippet_lower) and \
+                       (last_name in title_lower or last_name in snippet_lower):
+                        return {
+                            "url": link,
+                            "snippet": snippet,
+                            "title": result_title
+                        }
         
-        return None
+        return {"url": None, "snippet": None, "title": None}
     except Exception:
-        return None
+        return {"url": None, "snippet": None, "title": None}
 
 async def research_attendee_background(name: str, company_name: str, title: str = "", linkedin_url: str = "") -> Dict[str, Any]:
     """Research attendee's professional background and experience."""
@@ -1349,6 +1356,12 @@ BD_INDEX_HTML = """
       padding: 1rem;
       margin: 0.5rem 0;
       display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .attendee-header {
+      display: flex;
       align-items: center;
       justify-content: space-between;
     }
@@ -1415,6 +1428,58 @@ BD_INDEX_HTML = """
     .phase-complete {
       background: var(--cro-green-100);
       border-color: var(--cro-green-400);
+    }
+
+    .linkedin-snippet {
+      background: var(--cro-blue-100);
+      border: 1px solid var(--cro-blue-200);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+
+    .linkedin-link {
+      color: var(--cro-blue-700);
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .linkedin-link:hover {
+      color: var(--cro-blue-800);
+      text-decoration: underline;
+    }
+
+    .hubspot-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      margin-top: 0.5rem;
+    }
+
+    .hubspot-status.found {
+      color: var(--cro-green-700);
+    }
+
+    .hubspot-status.not-found {
+      color: var(--cro-purple-700);
+    }
+
+    .research-results {
+      display: none;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--cro-plat-300);
+    }
+
+    .research-results.show {
+      display: block;
     }
 
     .hubspot-options {
@@ -1641,17 +1706,24 @@ Position CROmetrics as the strategic partner who understands their business and 
       attendeeDiv.id = `attendee-${attendeeCounter}`;
       
       attendeeDiv.innerHTML = `
-        <div class="attendee-fields">
-          <input type="text" placeholder="Full Name" value="${name}" data-field="name">
-          <input type="text" placeholder="Title/Role" value="${title}" data-field="title">
-          <input type="text" placeholder="Company" value="" data-field="company">
-          <input type="email" placeholder="Email (optional)" value="${email}" data-field="email">
+        <div class="attendee-header">
+          <div class="attendee-fields">
+            <input type="text" placeholder="Full Name" value="${name}" data-field="name">
+            <input type="text" placeholder="Title/Role" value="${title}" data-field="title">
+            <input type="text" placeholder="Company" value="" data-field="company">
+            <input type="email" placeholder="Email (optional)" value="${email}" data-field="email">
+          </div>
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div class="attendee-status status-unknown" id="status-${attendeeCounter}">Unknown</div>
+            <div class="attendee-actions" id="actions-${attendeeCounter}" style="display: none;">
+              <button type="button" class="secondary hubspot-btn" onclick="addToHubSpot(${attendeeCounter})" style="display: none;">Add to HubSpot</button>
+            </div>
+            <button type="button" class="remove" onclick="removeAttendee(${attendeeCounter})">Remove</button>
+          </div>
         </div>
-        <div class="attendee-status status-unknown" id="status-${attendeeCounter}">Unknown</div>
-        <div class="attendee-actions" id="actions-${attendeeCounter}" style="display: none;">
-          <button type="button" class="secondary hubspot-btn" onclick="addToHubSpot(${attendeeCounter})" style="display: none;">Add to HubSpot</button>
+        <div class="research-results" id="research-${attendeeCounter}">
+          <!-- Research results will be populated here -->
         </div>
-        <button type="button" class="remove" onclick="removeAttendee(${attendeeCounter})">Remove</button>
       `;
       
       attendeesList.appendChild(attendeeDiv);
@@ -1784,12 +1856,20 @@ Position CROmetrics as the strategic partner who understands their business and 
             const statusEl = document.getElementById(`status-${attendeeId}`);
             const actionsEl = document.getElementById(`actions-${attendeeId}`);
             const hubspotBtn = actionsEl.querySelector('.hubspot-btn');
+            const researchResultsEl = document.getElementById(`research-${attendeeId}`);
             
-            // Update company field if it was discovered
-            if (attendee.company && !document.querySelector(`#attendee-${attendeeId} [data-field="company"]`).value) {
-              document.querySelector(`#attendee-${attendeeId} [data-field="company"]`).value = attendee.company;
+            // Auto-populate fields with discovered information
+            const nameField = document.querySelector(`#attendee-${attendeeId} [data-field="name"]`);
+            const titleField = document.querySelector(`#attendee-${attendeeId} [data-field="title"]`);
+            const companyField = document.querySelector(`#attendee-${attendeeId} [data-field="company"]`);
+            const emailField = document.querySelector(`#attendee-${attendeeId} [data-field="email"]`);
+            
+            // Update fields if we have better information
+            if (attendee.company && !companyField.value) {
+              companyField.value = attendee.company;
             }
             
+            // Update status
             if (attendee.linkedin_url) {
               statusEl.textContent = `✓ LinkedIn Found`;
               statusEl.className = 'attendee-status status-researched';
@@ -1798,14 +1878,57 @@ Position CROmetrics as the strategic partner who understands their business and 
               statusEl.className = 'attendee-status status-unknown';
             }
 
-            // Show HubSpot button if not in HubSpot
-            if (!attendee.hubspot_contact && attendee.email) {
-              hubspotBtn.style.display = 'inline-block';
-              actionsEl.style.display = 'flex';
-            } else if (attendee.hubspot_contact) {
+            // Build research results HTML
+            let researchHtml = '';
+            
+            // HubSpot Status
+            if (attendee.hubspot_contact) {
+              researchHtml += `
+                <div class="hubspot-status found">
+                  ✅ <strong>Found in HubSpot</strong> (Contact ID: ${attendee.hubspot_contact.id || 'N/A'})
+                </div>
+              `;
               statusEl.textContent += ', In HubSpot';
               statusEl.className = 'attendee-status status-found';
+            } else {
+              researchHtml += `
+                <div class="hubspot-status not-found">
+                  ℹ️ <strong>Not in HubSpot</strong> - Add button will appear below
+                </div>
+              `;
+              // Show HubSpot button if not in HubSpot and has email
+              if (attendee.email) {
+                hubspotBtn.style.display = 'inline-block';
+                actionsEl.style.display = 'flex';
+              }
             }
+            
+            // LinkedIn Information
+            if (attendee.linkedin_url) {
+              researchHtml += `
+                <a href="${attendee.linkedin_url}" target="_blank" class="linkedin-link">
+                  🔗 View LinkedIn Profile
+                </a>
+              `;
+              
+              if (attendee.linkedin_snippet) {
+                researchHtml += `
+                  <div class="linkedin-snippet">
+                    <strong>${attendee.linkedin_title || 'LinkedIn Profile'}</strong><br>
+                    ${attendee.linkedin_snippet}
+                  </div>
+                `;
+              }
+            } else {
+              researchHtml += `
+                <div class="linkedin-snippet" style="background: var(--cro-yellow-100); border-color: var(--cro-yellow-400);">
+                  ⚠️ LinkedIn profile not found. You may want to search manually or verify the name/company.
+                </div>
+              `;
+            }
+            
+            researchResultsEl.innerHTML = researchHtml;
+            researchResultsEl.classList.add('show');
           });
 
           document.getElementById('research-status').textContent = `Research complete! Found ${data.linkedin_found} LinkedIn profiles.`;
@@ -2016,6 +2139,8 @@ async def api_bd_generate(req: Request) -> JSONResponse:
                 "email": email,
                 "company": company_name,
                 "linkedin_url": None,
+                "linkedin_snippet": None,
+                "linkedin_title": None,
                 "hubspot_contact": None,
                 "background_research": None
             }
@@ -2030,8 +2155,10 @@ async def api_bd_generate(req: Request) -> JSONResponse:
             
             # LinkedIn discovery if not already found in HubSpot
             if not enriched_attendee["linkedin_url"]:
-                linkedin_url = await research_attendee_linkedin(name, company_name, title)
-                enriched_attendee["linkedin_url"] = linkedin_url
+                linkedin_data = await research_attendee_linkedin(name, company_name, title)
+                enriched_attendee["linkedin_url"] = linkedin_data.get("url")
+                enriched_attendee["linkedin_snippet"] = linkedin_data.get("snippet")
+                enriched_attendee["linkedin_title"] = linkedin_data.get("title")
             
             # Background research
             background_data = await research_attendee_background(
@@ -2198,6 +2325,8 @@ async def api_bd_research_attendees(req: Request) -> JSONResponse:
             "company": company,
             "email": email,
             "linkedin_url": None,
+            "linkedin_snippet": None,
+            "linkedin_title": None,
             "hubspot_contact": None,
             "background_research": None
         }
@@ -2212,8 +2341,10 @@ async def api_bd_research_attendees(req: Request) -> JSONResponse:
         
         # LinkedIn discovery if not already found in HubSpot
         if not enriched_attendee["linkedin_url"]:
-            linkedin_url = await research_attendee_linkedin(name, company, title)
-            enriched_attendee["linkedin_url"] = linkedin_url
+            linkedin_data = await research_attendee_linkedin(name, company, title)
+            enriched_attendee["linkedin_url"] = linkedin_data.get("url")
+            enriched_attendee["linkedin_snippet"] = linkedin_data.get("snippet")
+            enriched_attendee["linkedin_title"] = linkedin_data.get("title")
         
         # Background research
         background_data = await research_attendee_background(
