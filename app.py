@@ -1355,7 +1355,7 @@ BD_INDEX_HTML = """
 
     .attendee-fields {
       display: grid;
-      grid-template-columns: 2fr 2fr 1fr;
+      grid-template-columns: 2fr 2fr 2fr 1fr;
       gap: 1rem;
       flex: 1;
     }
@@ -1380,6 +1380,41 @@ BD_INDEX_HTML = """
     .status-new {
       background: var(--cro-blue-100);
       color: var(--cro-blue-700);
+    }
+
+    .status-researched {
+      background: var(--cro-purple-400);
+      color: var(--cro-white);
+    }
+
+    .attendee-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .hubspot-btn {
+      background: var(--cro-green-600);
+      color: var(--cro-white);
+      font-size: 0.8rem;
+      padding: 0.4rem 0.8rem;
+    }
+
+    .hubspot-btn:hover {
+      background: var(--cro-green-700);
+    }
+
+    .research-phase {
+      background: var(--cro-yellow-100);
+      border: 1px solid var(--cro-yellow-400);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 1rem 0;
+    }
+
+    .phase-complete {
+      background: var(--cro-green-100);
+      border-color: var(--cro-green-400);
     }
 
     .hubspot-options {
@@ -1548,13 +1583,9 @@ BD_INDEX_HTML = """
       
       <div class="hubspot-options">
         <label>
-          <input type="checkbox" id="check-hubspot" checked> Check HubSpot for existing contacts
+          <input type="checkbox" id="check-hubspot" checked> Check HubSpot for existing contacts during research
         </label>
-        <br>
-        <label style="margin-top: 0.5rem;">
-          <input type="checkbox" id="add-to-hubspot"> Add new attendees to HubSpot after research
-        </label>
-        <div class="muted" style="margin-top: 0.5rem;">Requires HubSpot token to be configured</div>
+        <div class="muted" style="margin-top: 0.5rem;">Individual "Add to HubSpot" buttons will appear for each attendee after research</div>
       </div>
     </div>
 
@@ -1567,9 +1598,22 @@ Focus on identifying specific opportunities where CROmetrics can drive measurabl
 Base all analysis on the research context provided. Mark gaps as **Unknown** and prioritize additional research needs.
 Position CROmetrics as the strategic partner who understands their business and can accelerate their transformation goals.</textarea>
 
-    <div class="row" style="margin-top: 1.5rem;">
-      <button id="run">Generate Intelligence Report</button>
-      <div id="status" class="muted" style="align-self: center; margin-left: 1rem;"></div>
+    <div class="research-phase" id="research-phase">
+      <h3 style="margin-top: 0; color: var(--cro-yellow-700);">Phase 1: Research Attendees</h3>
+      <p class="muted">First, let's research each attendee to gather their LinkedIn profiles and professional background.</p>
+      <div class="row">
+        <button id="research-attendees">Research All Attendees</button>
+        <div id="research-status" class="muted" style="align-self: center; margin-left: 1rem;"></div>
+      </div>
+    </div>
+
+    <div class="research-phase phase-complete" id="intelligence-phase" style="display: none;">
+      <h3 style="margin-top: 0; color: var(--cro-green-700);">Phase 2: Generate Intelligence Report</h3>
+      <p class="muted">Now that we have researched all attendees, generate the comprehensive meeting intelligence report.</p>
+      <div class="row">
+        <button id="run">Generate Intelligence Report</button>
+        <div id="status" class="muted" style="align-self: center; margin-left: 1rem;"></div>
+      </div>
     </div>
   </div>
 
@@ -1600,9 +1644,13 @@ Position CROmetrics as the strategic partner who understands their business and 
         <div class="attendee-fields">
           <input type="text" placeholder="Full Name" value="${name}" data-field="name">
           <input type="text" placeholder="Title/Role" value="${title}" data-field="title">
+          <input type="text" placeholder="Company" value="" data-field="company">
           <input type="email" placeholder="Email (optional)" value="${email}" data-field="email">
         </div>
         <div class="attendee-status status-unknown" id="status-${attendeeCounter}">Unknown</div>
+        <div class="attendee-actions" id="actions-${attendeeCounter}" style="display: none;">
+          <button type="button" class="secondary hubspot-btn" onclick="addToHubSpot(${attendeeCounter})" style="display: none;">Add to HubSpot</button>
+        </div>
         <button type="button" class="remove" onclick="removeAttendee(${attendeeCounter})">Remove</button>
       `;
       
@@ -1634,18 +1682,147 @@ Position CROmetrics as the strategic partner who understands their business and 
       attendeeItems.forEach(item => {
         const name = item.querySelector('[data-field="name"]').value.trim();
         const title = item.querySelector('[data-field="title"]').value.trim();
+        const company = item.querySelector('[data-field="company"]').value.trim();
         const email = item.querySelector('[data-field="email"]').value.trim();
         
         if (name) {
           attendees.push({
             name: name,
             title: title,
+            company: company,
             email: email
           });
         }
       });
       
       return attendees;
+    }
+
+    let attendeeResearchData = [];
+
+    function addToHubSpot(attendeeId) {
+      const attendee = attendeeResearchData.find(a => a.ui_id === attendeeId);
+      if (!attendee) return;
+
+      const statusEl = document.getElementById(`status-${attendeeId}`);
+      const hubspotBtn = document.querySelector(`#actions-${attendeeId} .hubspot-btn`);
+      
+      statusEl.textContent = 'Adding to HubSpot...';
+      hubspotBtn.disabled = true;
+
+      // Call API to add to HubSpot
+      fetch('/api/bd/add-to-hubspot', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          attendee: {
+            name: attendee.name,
+            title: attendee.title,
+            company: attendee.company,
+            email: attendee.email,
+            linkedin_url: attendee.linkedin_url
+          }
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          statusEl.textContent = 'Added to HubSpot';
+          statusEl.className = 'attendee-status status-found';
+          hubspotBtn.style.display = 'none';
+          attendee.hubspot_contact = {id: data.contact_id, created: true};
+        } else {
+          statusEl.textContent = 'HubSpot Error';
+          hubspotBtn.disabled = false;
+        }
+      })
+      .catch(error => {
+        statusEl.textContent = 'HubSpot Error';
+        hubspotBtn.disabled = false;
+      });
+    }
+
+    async function researchAttendees() {
+      const attendees = getAttendees();
+      if (attendees.length === 0) {
+        alert('Please add at least one attendee');
+        return;
+      }
+
+      const targetCompany = document.getElementById('company').value.trim();
+      if (!targetCompany) {
+        alert('Please enter the target company name');
+        return;
+      }
+
+      document.getElementById('research-attendees').disabled = true;
+      document.getElementById('research-status').textContent = 'Researching attendees...';
+      
+      attendeeResearchData = [];
+
+      try {
+        const response = await fetch('/api/bd/research-attendees', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            attendees: attendees,
+            target_company: targetCompany,
+            check_hubspot: document.getElementById('check-hubspot').checked
+          })
+        });
+
+        const data = await response.json();
+        
+        if (response.ok) {
+          attendeeResearchData = data.researched_attendees;
+          
+          // Update UI with research results
+          attendeeResearchData.forEach((attendee, index) => {
+            const attendeeId = index + 1; // Assuming sequential IDs
+            attendee.ui_id = attendeeId;
+            
+            const statusEl = document.getElementById(`status-${attendeeId}`);
+            const actionsEl = document.getElementById(`actions-${attendeeId}`);
+            const hubspotBtn = actionsEl.querySelector('.hubspot-btn');
+            
+            // Update company field if it was discovered
+            if (attendee.company && !document.querySelector(`#attendee-${attendeeId} [data-field="company"]`).value) {
+              document.querySelector(`#attendee-${attendeeId} [data-field="company"]`).value = attendee.company;
+            }
+            
+            if (attendee.linkedin_url) {
+              statusEl.textContent = `✓ LinkedIn Found`;
+              statusEl.className = 'attendee-status status-researched';
+            } else {
+              statusEl.textContent = 'No LinkedIn Found';
+              statusEl.className = 'attendee-status status-unknown';
+            }
+
+            // Show HubSpot button if not in HubSpot
+            if (!attendee.hubspot_contact && attendee.email) {
+              hubspotBtn.style.display = 'inline-block';
+              actionsEl.style.display = 'flex';
+            } else if (attendee.hubspot_contact) {
+              statusEl.textContent += ', In HubSpot';
+              statusEl.className = 'attendee-status status-found';
+            }
+          });
+
+          document.getElementById('research-status').textContent = `Research complete! Found ${data.linkedin_found} LinkedIn profiles.`;
+          
+          // Show Phase 2
+          document.getElementById('research-phase').style.display = 'none';
+          document.getElementById('intelligence-phase').style.display = 'block';
+          
+        } else {
+          throw new Error(data.detail || 'Research failed');
+        }
+        
+      } catch (error) {
+        document.getElementById('research-status').textContent = 'Research failed: ' + error.message;
+      } finally {
+        document.getElementById('research-attendees').disabled = false;
+      }
     }
 
     function parseMarkdown(text) {
@@ -1699,15 +1876,14 @@ Position CROmetrics as the strategic partner who understands their business and 
 
     async function run(){
       out.textContent = '';
-      statusEl.textContent = 'Starting research...';
+      statusEl.textContent = 'Generating intelligence report...';
       progressEl.style.display = 'block';
       progressSteps.innerHTML = '';
       document.getElementById('run').disabled = true;
       
       try{
-        const attendees = getAttendees();
-        if (attendees.length === 0) {
-          throw new Error('Please add at least one attendee');
+        if (attendeeResearchData.length === 0) {
+          throw new Error('Please research attendees first');
         }
 
         const body = {
@@ -1716,12 +1892,10 @@ Position CROmetrics as the strategic partner who understands their business and 
           meeting_context: document.getElementById('meeting_context').value,
           effort: document.getElementById('effort').value,
           prompt: document.getElementById('prompt').value,
-          attendees: attendees,
-          check_hubspot: document.getElementById('check-hubspot').checked,
-          add_to_hubspot: document.getElementById('add-to-hubspot').checked
+          researched_attendees: attendeeResearchData
         };
         
-        updateProgress('Initiating company and attendee research...');
+        updateProgress('Generating intelligence report with researched attendee data...');
         
         const r = await fetch('/api/bd/generate', {
           method:'POST', 
@@ -1732,7 +1906,7 @@ Position CROmetrics as the strategic partner who understands their business and 
         const data = await r.json();
         if(!r.ok){ throw new Error(data.detail || JSON.stringify(data)); }
         
-        updateProgress('Research completed, generating report...');
+        updateProgress('Intelligence report generated successfully!');
         statusEl.textContent = 'Done.';
         
         const markdown = data.report_markdown || '(no output)';
@@ -1753,6 +1927,7 @@ Position CROmetrics as the strategic partner who understands their business and 
     // Initialize with one attendee
     addAttendee();
     
+    document.getElementById('research-attendees').addEventListener('click', researchAttendees);
     document.getElementById('run').addEventListener('click', run);
   </script>
 </body>
@@ -1795,99 +1970,91 @@ async def api_bd_generate(req: Request) -> JSONResponse:
     if not company_name:
         raise HTTPException(status_code=400, detail="company_name is required")
 
-    # Handle both old single-attendee format and new multiple-attendee format
-    attendees_data = payload.get("attendees", [])
-    if not attendees_data:
-        # Fallback to old format for backwards compatibility
-        executive_name = (payload.get("executive_name") or "").strip()
-        executive_title = (payload.get("executive_title") or "").strip()
-        if executive_name:
-            attendees_data = [{"name": executive_name, "title": executive_title, "email": ""}]
+    # Handle both old format and new researched attendees format
+    researched_attendees = payload.get("researched_attendees", [])
+    if researched_attendees:
+        # New workflow: use pre-researched attendees
+        enriched_attendees = researched_attendees
+    else:
+        # Legacy workflow: research attendees inline (backwards compatibility)
+        attendees_data = payload.get("attendees", [])
+        if not attendees_data:
+            # Fallback to old format for backwards compatibility
+            executive_name = (payload.get("executive_name") or "").strip()
+            executive_title = (payload.get("executive_title") or "").strip()
+            if executive_name:
+                attendees_data = [{"name": executive_name, "title": executive_title, "email": ""}]
 
-    if not attendees_data:
-        raise HTTPException(status_code=400, detail="At least one attendee is required")
+        if not attendees_data:
+            raise HTTPException(status_code=400, detail="At least one attendee is required")
+        
+        # Legacy inline research (for backwards compatibility)
+        enriched_attendees = []
+        hubspot_contacts = []
+        
+        # Check HubSpot for existing contacts if requested
+        check_hubspot = payload.get("check_hubspot", True)
+        if check_hubspot and HUBSPOT_TOKEN:
+            attendee_emails = [a.get("email") for a in attendees_data if a.get("email")]
+            if attendee_emails:
+                try:
+                    hubspot_contacts = await fetch_contacts_by_email(attendee_emails)
+                except Exception:
+                    hubspot_contacts = []
+        
+        for attendee in attendees_data:
+            name = attendee.get("name", "").strip()
+            title = attendee.get("title", "").strip()
+            email = attendee.get("email", "").strip()
+            
+            if not name:
+                continue
+                
+            enriched_attendee = {
+                "name": name,
+                "title": title,
+                "email": email,
+                "company": company_name,
+                "linkedin_url": None,
+                "hubspot_contact": None,
+                "background_research": None
+            }
+            
+            # Check if this attendee exists in HubSpot
+            if email and hubspot_contacts:
+                for contact in hubspot_contacts:
+                    if contact.get("email", "").lower() == email.lower():
+                        enriched_attendee["hubspot_contact"] = contact
+                        enriched_attendee["linkedin_url"] = contact.get("linkedin_url")
+                        break
+            
+            # LinkedIn discovery if not already found in HubSpot
+            if not enriched_attendee["linkedin_url"]:
+                linkedin_url = await research_attendee_linkedin(name, company_name, title)
+                enriched_attendee["linkedin_url"] = linkedin_url
+            
+            # Background research
+            background_data = await research_attendee_background(
+                name, company_name, title, enriched_attendee["linkedin_url"] or ""
+            )
+            enriched_attendee["background_research"] = background_data
+            
+            enriched_attendees.append(enriched_attendee)
 
     industry = (payload.get("industry") or "").strip()
     meeting_context = (payload.get("meeting_context") or "").strip()
     effort = (payload.get("effort") or "high").lower()
     prompt = (payload.get("prompt") or BD_DEFAULT_PROMPT).strip()
-    check_hubspot = payload.get("check_hubspot", True)
-    add_to_hubspot = payload.get("add_to_hubspot", False)
 
     # 1) Company research
-    # Use the first attendee's name for legacy company research
-    primary_attendee = attendees_data[0]
+    # Use the first attendee's name for company research
+    primary_attendee = enriched_attendees[0] if enriched_attendees else {"name": ""}
     research_data = await research_company(company_name, primary_attendee.get("name", ""))
     
     # 2) Competitive landscape research
     competitive_data = await research_competitive_landscape(company_name, industry)
     
-    # 3) Attendee research and LinkedIn discovery
-    enriched_attendees = []
-    hubspot_contacts = []
-    
-    # Check HubSpot for existing contacts if requested
-    if check_hubspot and HUBSPOT_TOKEN:
-        attendee_emails = [a.get("email") for a in attendees_data if a.get("email")]
-        if attendee_emails:
-            try:
-                hubspot_contacts = await fetch_contacts_by_email(attendee_emails)
-            except Exception:
-                hubspot_contacts = []
-    
-    for attendee in attendees_data:
-        name = attendee.get("name", "").strip()
-        title = attendee.get("title", "").strip()
-        email = attendee.get("email", "").strip()
-        
-        if not name:
-            continue
-            
-        enriched_attendee = {
-            "name": name,
-            "title": title,
-            "email": email,
-            "company": company_name,
-            "linkedin_url": None,
-            "hubspot_contact": None,
-            "background_research": None
-        }
-        
-        # Check if this attendee exists in HubSpot
-        if email and hubspot_contacts:
-            for contact in hubspot_contacts:
-                if contact.get("email", "").lower() == email.lower():
-                    enriched_attendee["hubspot_contact"] = contact
-                    enriched_attendee["linkedin_url"] = contact.get("linkedin_url")
-                    break
-        
-        # LinkedIn discovery if not already found in HubSpot
-        if not enriched_attendee["linkedin_url"]:
-            linkedin_url = await research_attendee_linkedin(name, company_name, title)
-            enriched_attendee["linkedin_url"] = linkedin_url
-        
-        # Background research
-        background_data = await research_attendee_background(
-            name, company_name, title, enriched_attendee["linkedin_url"] or ""
-        )
-        enriched_attendee["background_research"] = background_data
-        
-        # Create HubSpot contact if requested and attendee not found
-        if add_to_hubspot and not enriched_attendee["hubspot_contact"] and HUBSPOT_TOKEN:
-            contact_data = {
-                "name": name,
-                "title": title,
-                "email": email,
-                "company": company_name,
-                "linkedin_url": enriched_attendee["linkedin_url"]
-            }
-            contact_id = await create_hubspot_contact(contact_data)
-            if contact_id:
-                enriched_attendee["hubspot_contact"] = {"id": contact_id, "created": True}
-        
-        enriched_attendees.append(enriched_attendee)
-    
-    # 4) Format research context
+    # 3) Format research context
     research_sections = []
     
     # Company overview
@@ -1965,7 +2132,7 @@ async def api_bd_generate(req: Request) -> JSONResponse:
 
     research_context = "\n".join(research_sections) if research_sections else "No research data available."
     
-    # 5) Compose full context
+    # 4) Compose full context
     attendee_summary = ", ".join([f"{a['name']} ({a['title'] or 'Title TBD'})" for a in enriched_attendees])
     composed_context = (
         f"TARGET COMPANY: {company_name}\n"
@@ -1975,7 +2142,7 @@ async def api_bd_generate(req: Request) -> JSONResponse:
         f"RESEARCH INTELLIGENCE:\n{research_context}"
     )
 
-    # 6) Generate BD intelligence report
+    # 5) Generate BD intelligence report
     report = await asyncio.wait_for(ask_o3_bd(prompt, composed_context, effort=effort), timeout=300.0)
 
     return JSONResponse({
@@ -1990,6 +2157,101 @@ async def api_bd_generate(req: Request) -> JSONResponse:
             "effort": effort,
         }
     })
+
+@app.post("/api/bd/research-attendees")
+async def api_bd_research_attendees(req: Request) -> JSONResponse:
+    """Research attendees phase - separate from intelligence report generation."""
+    payload = await req.json()
+    
+    attendees_data = payload.get("attendees", [])
+    if not attendees_data:
+        raise HTTPException(status_code=400, detail="At least one attendee is required")
+    
+    target_company = payload.get("target_company", "").strip()
+    check_hubspot = payload.get("check_hubspot", True)
+    
+    # Research each attendee
+    enriched_attendees = []
+    hubspot_contacts = []
+    
+    # Check HubSpot for existing contacts if requested
+    if check_hubspot and HUBSPOT_TOKEN:
+        attendee_emails = [a.get("email") for a in attendees_data if a.get("email")]
+        if attendee_emails:
+            try:
+                hubspot_contacts = await fetch_contacts_by_email(attendee_emails)
+            except Exception:
+                hubspot_contacts = []
+    
+    for attendee in attendees_data:
+        name = attendee.get("name", "").strip()
+        title = attendee.get("title", "").strip()
+        company = attendee.get("company", "").strip() or target_company
+        email = attendee.get("email", "").strip()
+        
+        if not name:
+            continue
+            
+        enriched_attendee = {
+            "name": name,
+            "title": title,
+            "company": company,
+            "email": email,
+            "linkedin_url": None,
+            "hubspot_contact": None,
+            "background_research": None
+        }
+        
+        # Check if this attendee exists in HubSpot
+        if email and hubspot_contacts:
+            for contact in hubspot_contacts:
+                if contact.get("email", "").lower() == email.lower():
+                    enriched_attendee["hubspot_contact"] = contact
+                    enriched_attendee["linkedin_url"] = contact.get("linkedin_url")
+                    break
+        
+        # LinkedIn discovery if not already found in HubSpot
+        if not enriched_attendee["linkedin_url"]:
+            linkedin_url = await research_attendee_linkedin(name, company, title)
+            enriched_attendee["linkedin_url"] = linkedin_url
+        
+        # Background research
+        background_data = await research_attendee_background(
+            name, company, title, enriched_attendee["linkedin_url"] or ""
+        )
+        enriched_attendee["background_research"] = background_data
+        
+        enriched_attendees.append(enriched_attendee)
+    
+    return JSONResponse({
+        "researched_attendees": enriched_attendees,
+        "linkedin_found": sum(1 for a in enriched_attendees if a["linkedin_url"]),
+        "hubspot_found": sum(1 for a in enriched_attendees if a["hubspot_contact"]),
+        "total_researched": len(enriched_attendees)
+    })
+
+@app.post("/api/bd/add-to-hubspot")
+async def api_bd_add_to_hubspot(req: Request) -> JSONResponse:
+    """Add a single attendee to HubSpot."""
+    payload = await req.json()
+    
+    attendee_data = payload.get("attendee", {})
+    if not attendee_data.get("name"):
+        raise HTTPException(status_code=400, detail="Attendee name is required")
+    
+    contact_id = await create_hubspot_contact(attendee_data)
+    
+    if contact_id:
+        return JSONResponse({
+            "success": True,
+            "contact_id": contact_id,
+            "message": "Contact created successfully"
+        })
+    else:
+        return JSONResponse({
+            "success": False,
+            "message": "Failed to create HubSpot contact"
+        }, status_code=400)
 
 @app.post("/api/run")
 async def api_run(req: Request) -> JSONResponse:
