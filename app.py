@@ -342,81 +342,319 @@ INDEX_HTML = """
   <meta charset=\"utf-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
   <title>Executive Meeting Brief Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;800&family=Caveat:wght@400;700&display=swap" rel="stylesheet">
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; margin:24px;}
-    h1{margin:0 0 16px 0}
-    .row{display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;}
-    label{display:block; font-size:12px; color:#444; margin-bottom:4px}
-    input, select, textarea{padding:8px; border:1px solid #bbb; border-radius:8px; font:inherit}
-    textarea{width:100%; height:160px}
-    button{padding:10px 14px; border-radius:8px; border:0; background:#111; color:white; cursor:pointer}
-    button[disabled]{opacity:0.5; cursor:not-allowed}
-    #out{border:1px dashed #aaa; padding:12px; border-radius:8px; margin-top:16px; line-height:1.6}
-    #out h1, #out h2, #out h3{margin-top:20px; margin-bottom:10px; color:#333}
-    #out h1{font-size:1.5em; border-bottom:2px solid #333}
-    #out h2{font-size:1.3em; border-bottom:1px solid #666}
-    #out h3{font-size:1.1em}
-    #out ul, #out ol{margin:10px 0; padding-left:20px}
-    #out li{margin:5px 0}
-    #out p{margin:10px 0}
-    #out strong{font-weight:600; color:#222}
-    #out code{background:#f5f5f5; padding:2px 4px; border-radius:3px; font-family:monospace}
-    #out pre{background:#f5f5f5; padding:10px; border-radius:5px; overflow-x:auto; margin:10px 0}
-    #out blockquote{border-left:4px solid #ddd; padding-left:16px; margin:10px 0; font-style:italic}
-    .muted{color:#666; font-size:12px}
+    :root {
+      /* CroMetrics Design Tokens */
+      --cro-blue-800: #0F8AFF;
+      --cro-blue-700: #2996FF;
+      --cro-blue-500: #399EFF;
+      --cro-blue-400: #61B1FF;
+      --cro-blue-200: #9CCEFF;
+      --cro-blue-100: #E0F0FF;
+      --cro-green-700: #509A6A;
+      --cro-green-600: #56A471;
+      --cro-green-500: #57A773;
+      --cro-green-400: #79B98F;
+      --cro-green-200: #ABD3B9;
+      --cro-green-100: #DEEDE3;
+      --cro-purple-800: #484D6D;
+      --cro-purple-700: #6D718A;
+      --cro-purple-400: #A3A6B6;
+      --cro-plat-400: #D5DDD9;
+      --cro-plat-300: #E3E8E6;
+      --cro-plat-100: #F4F6F5;
+      --cro-yellow-700: #C7870A;
+      --cro-yellow-600: #F5B841;
+      --cro-yellow-500: #F7C667;
+      --cro-yellow-400: #FADCA0;
+      --cro-yellow-100: #FCEDCF;
+      --cro-red-600: #EB0000;
+      --cro-red-500: #FF0000;
+      --cro-red-300: #FFD6D6;
+      --cro-soft-black-700: #2F2B2F;
+      --cro-white: #FFFFFF;
+      --radius: 1.5rem;
+    }
+
+    body{
+      font-family: 'Montserrat', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: var(--cro-plat-100);
+      color: var(--cro-soft-black-700);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    h1{
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 800;
+      font-size: 2.5rem;
+      color: var(--cro-soft-black-700);
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    label{
+      font-family: 'Montserrat', sans-serif;
+      display: block;
+      font-weight: 600;
+      margin: 1rem 0 0.5rem 0;
+      color: var(--cro-soft-black-700);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    select, input, textarea{
+      font-family: 'Montserrat', sans-serif;
+      font-size: 1rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--cro-plat-300);
+      border-radius: 12px;
+      background: var(--cro-white);
+      color: var(--cro-soft-black-700);
+      transition: all 0.2s;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    select:focus, input:focus, textarea:focus{
+      outline: none;
+      border-color: var(--cro-blue-700);
+      box-shadow: 0 0 0 3px var(--cro-blue-100);
+    }
+
+    textarea{
+      width: 100%;
+      min-height: 160px;
+      resize: vertical;
+      font-family: 'Montserrat', sans-serif;
+      line-height: 1.5;
+    }
+
+    button{
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 0.75rem 2rem;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--cro-blue-700);
+      color: var(--cro-white);
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    button:hover{
+      background: var(--cro-blue-800);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+
+    button:active{
+      transform: translateY(0);
+    }
+
+    button[disabled]{
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .row{
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      margin-bottom: 1rem;
+    }
+
+    .row > div{
+      flex: 1;
+      min-width: 250px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card{
+      background: var(--cro-white);
+      border: 1px solid var(--cro-plat-300);
+      border-radius: var(--radius);
+      padding: 2rem;
+      margin: 1rem 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    #out{
+      background: var(--cro-white);
+      border: 1px solid var(--cro-plat-300);
+      padding: 2rem;
+      border-radius: var(--radius);
+      line-height: 1.6;
+      font-family: 'Montserrat', sans-serif;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-top: 2rem;
+    }
+
+    #out h1, #out h2, #out h3{
+      font-family: 'Montserrat', sans-serif;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      color: var(--cro-soft-black-700);
+    }
+
+    #out h1{
+      font-size: 2rem;
+      font-weight: 800;
+      border-bottom: 2px solid var(--cro-plat-300);
+      padding-bottom: 0.75rem;
+      color: var(--cro-blue-700);
+    }
+
+    #out h2{
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--cro-soft-black-700);
+    }
+
+    #out h3{
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--cro-purple-700);
+    }
+
+    #out p{
+      margin: 1rem 0;
+      color: var(--cro-soft-black-700);
+    }
+
+    #out ul, #out ol{
+      margin: 1rem 0;
+      padding-left: 2rem;
+    }
+
+    #out li{
+      margin: 0.5rem 0;
+      color: var(--cro-soft-black-700);
+    }
+
+    #out strong{
+      font-weight: 700;
+      color: var(--cro-soft-black-700);
+    }
+
+    #out code{
+      background: var(--cro-plat-100);
+      padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.9rem;
+      color: var(--cro-soft-black-700);
+    }
+
+    #out pre{
+      background: var(--cro-plat-100);
+      padding: 1.5rem;
+      border-radius: 12px;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+      border: 1px solid var(--cro-plat-300);
+    }
+
+    #out blockquote{
+      border-left: 4px solid var(--cro-blue-400);
+      padding-left: 1.5rem;
+      margin: 1.5rem 0;
+      font-style: italic;
+      color: var(--cro-purple-700);
+    }
+
+    .muted{
+      color: var(--cro-purple-400);
+      font-size: 0.875rem;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      body { 
+        padding: 1rem; 
+      }
+      
+      .row { 
+        flex-direction: column; 
+        gap: 1rem; 
+      }
+      
+      .row > div { 
+        min-width: auto; 
+      }
+      
+      h1 { 
+        font-size: 2rem; 
+      }
+      
+      .card {
+        padding: 1.5rem;
+      }
+    }
   </style>
 </head>
 <body>
   <h1>Executive Meeting Brief Generator</h1>
-  <div class="row">
-    <div>
-      <label for="channel">Slack channel</label>
-      <select id="channel"></select>
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="channel">Slack channel</label>
+        <select id="channel"></select>
+      </div>
+      <div>
+        <label for="limit">Max messages</label>
+        <input id="limit" type="number" value="300" min="20" max="1000" />
+      </div>
+      <div>
+        <label for="days">Lookback days</label>
+        <input id="days" type="number" value="14" min="1" max="90" />
+      </div>
+      <div>
+        <label for="effort">Reasoning effort</label>
+        <select id="effort">
+          <option value="high" selected>high</option>
+          <option value="medium">medium</option>
+          <option value="low">low</option>
+        </select>
+      </div>
     </div>
-    <div>
-      <label for="limit">Max messages</label>
-      <input id="limit" type="number" value="300" min="20" max="1000" />
-    </div>
-    <div>
-      <label for="days">Lookback days</label>
-      <input id="days" type="number" value="14" min="1" max="90" />
-    </div>
-    <div>
-      <label for="effort">Reasoning effort</label>
-      <select id="effort">
-        <option value="high" selected>high</option>
-        <option value="medium">medium</option>
-        <option value="low">low</option>
-      </select>
-    </div>
-  </div>
 
-  <div class="row" style="margin-top:12px">
-    <div style="flex:1; min-width:320px">
-      <label for="attendees">Attendee emails (comma-separated)</label>
-      <input id="attendees" type="text" placeholder="alex@client.com, pat@client.com" style="width:100%" />
-      <div class="muted">HubSpot Private App token must be set to enrich attendees; otherwise this is ignored.</div>
+    <div class="row">
+      <div>
+        <label for="attendees">Attendee emails (comma-separated)</label>
+        <input id="attendees" type="text" placeholder="alex@client.com, pat@client.com" />
+        <div class="muted" style="margin-top: 0.5rem;">HubSpot Private App token must be set to enrich attendees; otherwise this is ignored.</div>
+      </div>
+      <div>
+        <label for="purpose">Meeting purpose</label>
+        <input id="purpose" type="text" placeholder="Discovery for Q4 upsell" />
+      </div>
     </div>
-    <div style="flex:1; min-width:320px">
-      <label for="purpose">Meeting purpose</label>
-      <input id="purpose" type="text" placeholder="Discovery for Q4 upsell" style="width:100%" />
-    </div>
-  </div>
 
-  <div style="margin-top:12px">
     <label for="prompt">Instruction to the model</label>
     <textarea id="prompt">Create an executive meeting brief that satisfies the Developer spec above.
-Use the ATTENDEES, ACCOUNT CONTEXT, and RECENT SLACK provided. Prioritize what’s actionable in the next 14 days.
+Use the ATTENDEES, ACCOUNT CONTEXT, and RECENT SLACK provided. Prioritize what's actionable in the next 14 days.
 Base every claim on the given context; if not present, mark as **Unknown**. Offer at most one labeled assumption when necessary.
 Cite Slack evidence inline as `[ISO8601Z @name]` when helpful. End with the Validation Checklist.</textarea>
+
+    <div class="row" style="margin-top: 1.5rem;">
+      <button id="run">Run</button>
+      <div id="status" class="muted" style="align-self: center; margin-left: 1rem;"></div>
+    </div>
   </div>
 
-  <div style="margin-top:12px" class="row">
-    <button id="run">Run</button>
-    <div id="status" class="muted"></div>
-  </div>
-
-  <div id="out"></div>
+  <h3 style="margin-top: 2rem; margin-bottom: 1rem; font-family: 'Montserrat', sans-serif; color: var(--cro-soft-black-700);">Output</h3>
+  <div id="out">(result will appear here)</div>
 
   <script>
     const channelSel = document.getElementById('channel');
