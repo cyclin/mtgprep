@@ -82,19 +82,25 @@ A FastAPI application that generates executive meeting briefs for both internal 
 
 ## Deployment
 
-This application is designed to be deployed on platforms like Railway, Render, or any Python hosting service that supports FastAPI applications.
+This application is deployed on Render at: **https://mtgprep-executive-brief.onrender.com/**
 
-### Railway Deployment
-1. Connect your GitHub repository to Railway
-2. Set the environment variables in Railway's dashboard
-3. Railway will automatically detect and deploy your FastAPI app
+### Live URLs
+- **Internal Meeting Prep**: https://mtgprep-executive-brief.onrender.com/
+- **BD Meeting Intelligence**: https://mtgprep-executive-brief.onrender.com/bd
 
-### Render Deployment
+### Render Deployment Process
 1. Connect your GitHub repository to Render
 2. Create a new Web Service
 3. Set build command: `pip install -r requirements.txt`
 4. Set start command: `python app.py`
 5. Add environment variables in Render's dashboard
+6. Render automatically redeploys when changes are pushed to the main branch
+
+### Environment Variables (Set in Render Dashboard)
+- `OPENAI_API_KEY` - Required for AI analysis
+- `SLACK_TOKEN` - Required for internal meeting Slack integration  
+- `HUBSPOT_TOKEN` - Optional, for internal meeting attendee enrichment
+- `SERPER_API_KEY` - Optional, for BD meeting web research capabilities
 
 ## Requirements
 
