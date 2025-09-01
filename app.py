@@ -1532,13 +1532,7 @@ BD_INDEX_HTML = """
       display: block;
     }
 
-    .hubspot-options {
-      background: var(--cro-green-100);
-      border: 1px solid var(--cro-green-200);
-      border-radius: 8px;
-      padding: 1rem;
-      margin: 1rem 0;
-    }
+
 
     #out{
       background: var(--cro-white);
@@ -1696,12 +1690,6 @@ BD_INDEX_HTML = """
         <!-- Attendees will be added here dynamically -->
       </div>
       
-      <div class="hubspot-options">
-        <label>
-          <input type="checkbox" id="check-hubspot" checked> Check HubSpot for existing contacts during research
-        </label>
-        <div class="muted" style="margin-top: 0.5rem;">Individual "Add to HubSpot" buttons will appear for each attendee after research</div>
-      </div>
     </div>
 
     <div class="research-phase" id="research-phase">
@@ -1889,7 +1877,7 @@ Position CROmetrics as the strategic partner who understands their business and 
           body: JSON.stringify({
             attendees: attendees,
             target_company: targetCompany,
-            check_hubspot: document.getElementById('check-hubspot').checked
+            check_hubspot: true
           })
         });
 
