@@ -28,7 +28,14 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 SLACK_TOKEN = os.getenv("SLACK_USER_TOKEN") or os.getenv("SLACK_BOT_TOKEN") or os.getenv("SLACK_TOKEN")
 HUBSPOT_TOKEN = os.getenv("HUBSPOT_TOKEN") or os.getenv("HUBSPOT_PRIVATE_APP_TOKEN")
 HUBSPOT_API_BASE = "https://api.hubapi.com"
+
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")  # For web search capabilities
+
+# Dynamic config and feature flags
+CURRENT_YEAR = datetime.now(timezone.utc).year
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "o3-pro")  # default to best quality reasoning model
+STRUCTURED_OUTPUT = os.getenv("STRUCTURED_OUTPUT", "0") == "1"  # if true, ask BD model to return JSON to render
+SELF_CRITIQUE = os.getenv("SELF_CRITIQUE", "0") == "1"  # reserved for future two-pass refinement
 
 if not OPENAI_API_KEY:
     # We'll raise at runtime if someone actually calls the endpoint, but keep server booting.
@@ -195,6 +202,7 @@ CLIENT SUCCESS EXAMPLES:
 Guardrails
 - Use only the provided research context. If information is missing, mark it **Unknown** and suggest research priorities.
 - Ground all claims in evidence from the research provided. Cite sources when helpful.
+- You may call tools when you need facts: `search_web`, `scrape_webpage`, `lookup_hubspot_contact_by_name`, `fetch_contacts_by_email`. Use tools sparingly and only to gather verifiable evidence.
 - Prefer structured analysis over narrative; use bullets and clear sections.
 - When making strategic assumptions, label them clearly and provide reasoning.
 - Pay special attention to attendee profiles and tailor recommendations to their specific backgrounds and priorities.
@@ -266,6 +274,189 @@ Base all analysis on the research context provided. Mark gaps as **Unknown** and
 Pay special attention to the individual attendee profiles and tailor your strategic recommendations to address each person's likely priorities and concerns. Consider how the group dynamic might influence decision-making and recommend specific approaches for engaging each attendee effectively.
 
 ALWAYS reference specific Cro Metrics services that align with their business challenges and demonstrate how our current offerings (as detailed on crometrics.com) can solve their specific problems. Use concrete examples from our client portfolio when relevant.
+"""
+
+# === Structured output (optional) ===
+BD_REPORT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "company": {"type": "string"},
+        "attendees": {"type": "array", "items": {"type": "string"}},
+        "executive_summary": {"type": "string"},
+        "target_company_intelligence": {"type": "string"},
+        "meeting_attendee_analysis": {"type": "string"},
+        "competitive_landscape_analysis": {"type": "string"},
+        "strategic_opportunity_assessment": {"type": "string"},
+        "meeting_dynamics_strategy": {"type": "string"},
+        "key_questions": {"type": "array", "items": {"type": "string"}},
+        "potential_objections_responses": {"type": "string"},
+        "follow_up_action_plan": {"type": "string"},
+        "research_validation_needed": {"type": "array", "items": {"type": "string"}},
+        "sources": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number"}
+    },
+    "required": ["executive_summary", "strategic_opportunity_assessment", "sources", "confidence"],
+    "additionalProperties": True
+}
+
+def _bd_json_to_markdown(doc: Dict[str, Any]) -> str:
+    def section(title: str, body: Any) -> str:
+        if body is None:
+            return f"# {title}\n\n(Unknown)"
+        if isinstance(body, list):
+            bullets = "\n".join([f"- {x}" for x in body])
+            return f"# {title}\n\n{bullets}"
+        return f"# {title}\n\n{str(body)}"
+
+    parts = []
+    parts.append(section("Executive Summary", doc.get("executive_summary")))
+    parts.append(section("Target Company Intelligence", doc.get("target_company_intelligence")))
+    parts.append(section("Meeting Attendee Analysis", doc.get("meeting_attendee_analysis")))
+    parts.append(section("Competitive Landscape Analysis", doc.get("competitive_landscape_analysis")))
+    parts.append(section("Strategic Opportunity Assessment", doc.get("strategic_opportunity_assessment")))
+    parts.append(section("Meeting Dynamics & Strategy", doc.get("meeting_dynamics_strategy")))
+    parts.append(section("Key Questions to Ask", doc.get("key_questions")))
+    parts.append(section("Potential Objections & Responses", doc.get("potential_objections_responses")))
+    parts.append(section("Follow-up Action Plan", doc.get("follow_up_action_plan")))
+    parts.append(section("Research Validation Needed", doc.get("research_validation_needed")))
+    sources = doc.get("sources") or []
+    if isinstance(sources, list) and sources:
+        parts.append("# Sources\n\n" + "\n".join([f"- {s}" for s in sources]))
+    return "\n\n".join(parts)
+
+# === Tool definitions for Responses API ===
+BD_TOOLS: List[Dict[str, Any]] = [
+    {
+        "type": "function",
+        "name": "search_web",
+        "description": "Search the web for a given query and return top results with title, snippet, and link.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "num_results": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}
+            },
+            "required": ["query"],
+            "additionalProperties": False
+        },
+        "strict": True
+    },
+    {
+        "type": "function",
+        "name": "scrape_webpage",
+        "description": "Fetch and extract readable text content from a URL (5k character limit).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "format": "uri"}
+            },
+            "required": ["url"],
+            "additionalProperties": False
+        },
+        "strict": True
+    },
+    {
+        "type": "function",
+        "name": "lookup_hubspot_contact_by_name",
+        "description": "Look up a HubSpot contact by full name and optional company to prevent duplicates. Returns key CRM fields if available.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "company": {"type": "string"}
+            },
+            "required": ["name"],
+            "additionalProperties": False
+        },
+        "strict": True
+    },
+    {
+        "type": "function",
+        "name": "fetch_contacts_by_email",
+        "description": "Fetch contact(s) by email in HubSpot. Returns simplified contact properties if found.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "email": {"type": "string", "format": "email"}
+            },
+            "required": ["email"],
+            "additionalProperties": False
+        },
+        "strict": True
+    }
+]
+
+async def _execute_tool_call(name: str, arguments: Dict[str, Any]) -> Any:
+    """Dispatch tool calls from the model to local async helpers."""
+    try:
+        if name == "search_web":
+            q = arguments.get("query", "")
+            n = int(arguments.get("num_results", 5) or 5)
+            return await web_search(q, max(1, min(10, n)))
+        if name == "scrape_webpage":
+            url = arguments.get("url", "")
+            return await scrape_webpage(url)
+        if name == "lookup_hubspot_contact_by_name":
+            nm = arguments.get("name", "")
+            co = arguments.get("company", "")
+            if not HUBSPOT_TOKEN:
+                return {"error": "HubSpot not configured"}
+            res = await search_hubspot_contact_by_name(nm, co)
+            return res or {}
+        if name == "fetch_contacts_by_email":
+            em = arguments.get("email", "")
+            if not HUBSPOT_TOKEN:
+                return {"error": "HubSpot not configured"}
+            res = await fetch_contacts_by_email([em])
+            return res or []
+        return {"error": f"Unknown tool: {name}"}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {str(e)}"}
+
+def _extract_tool_calls(resp: Any) -> List[Dict[str, Any]]:
+    """Best-effort extraction of tool calls from Responses API output."""
+    calls: List[Dict[str, Any]] = []
+    # Pattern 1: traverse output -> content list
+    for item in getattr(resp, "output", []) or []:
+        for c in item.get("content", []) or []:
+            t = c.get("type")
+            if t in ("tool_call", "tool_use"):
+                call_id = c.get("id") or c.get("tool_call_id") or ""
+                name = c.get("name")
+                args = c.get("arguments") or {}
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except Exception:
+                        args = {"raw": args}
+                calls.append({"id": call_id, "name": name, "arguments": args})
+    # Pattern 2: some SDKs expose .tool_calls
+    for c in getattr(resp, "tool_calls", []) or []:
+        args = c.get("arguments") or {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except Exception:
+                args = {"raw": args}
+        calls.append({"id": c.get("id") or c.get("tool_call_id") or "", "name": c.get("name"), "arguments": args})
+    return calls
+
+# === Critique pass (two-step refinement) ===
+BD_CRITIQUE_DEV_MESSAGE = """
+You are the BD Report Critic & Rewriter for Cro Metrics.
+Task: Review an initial BD intelligence report and return an improved report that:
+- Strengthens evidence (no unsourced claims; keep/expand sources).
+- Tightens mapping between needs and Cro Metrics services (Analytics, CRO, Creative Services, Customer Journey Analysis, Design & Build, Iris, Lifecycle & Email, Performance Marketing).
+- Adds concrete KPIs/targets and a realistic first-90-days plan where appropriate.
+- Preserves unknowns (do not invent); if a gap exists, keep it and add to Research Validation Needed.
+- Improves clarity and executive-readability; remove fluff; keep content actionable.
+Output contract: Return ONLY JSON that conforms to the provided BD_REPORT_SCHEMA. Do not include any additional keys beyond the schema except those allowed by 'additionalProperties'.
+"""
+
+CRITIQUE_MD_DEV_MESSAGE = """
+You are the BD Report Critic & Rewriter for Cro Metrics.
+Task: Rewrite the draft Markdown report to address gaps, remove fluff, strengthen evidence and service mapping, and make it meeting-ready.
+Constraints: Use only the provided draft and research context; do NOT invent facts. Where information is unknown, leave it clearly labeled as Unknown and add specific questions to a Research Validation section. Return ONLY Markdown.
 """
 
 ###############################################
@@ -690,12 +881,12 @@ async def research_company(company_name: str, executive_name: str = "") -> Dict[
     }
     
     # Company overview search
-    overview_query = f"{company_name} company overview business model strategy 2024"
+    overview_query = f"{company_name} company overview business model strategy {CURRENT_YEAR}"
     overview_results = await web_search(overview_query, 5)
     research_results["company_overview"] = overview_results
     
     # Recent news search
-    news_query = f"{company_name} news earnings digital transformation 2024"
+    news_query = f"{company_name} news earnings digital transformation {CURRENT_YEAR}"
     news_results = await web_search(news_query, 5)
     research_results["recent_news"] = news_results
     
@@ -706,7 +897,7 @@ async def research_company(company_name: str, executive_name: str = "") -> Dict[
         research_results["executive_info"] = exec_results
     
     # Financial/earnings search
-    financial_query = f"{company_name} annual report earnings financial results 2024"
+    financial_query = f"{company_name} annual report earnings financial results {CURRENT_YEAR}"
     financial_results = await web_search(financial_query, 3)
     research_results["financial_info"] = financial_results
     
@@ -852,13 +1043,14 @@ async def create_hubspot_contact(attendee_data: Dict[str, Any]) -> Optional[str]
 async def ask_o3(user_prompt: str, composed_context: str, effort: str = "high") -> str:
     client = _openai_client()
     resp = client.responses.create(
-        model="o3",
+        model=OPENAI_MODEL,
         reasoning={"effort": effort},
         input=[
             {"role": "developer", "content": DEV_MESSAGE},
             {"role": "user", "content": user_prompt + "\n\n" + composed_context},
         ],
-        max_output_tokens=3000,
+        temperature=0.2,
+        max_output_tokens=4000,
     )
     # The SDK exposes a convenience property; fall back if not present.
     text = getattr(resp, "output_text", None)
@@ -876,33 +1068,136 @@ async def ask_o3(user_prompt: str, composed_context: str, effort: str = "high") 
     except Exception:
         return "(No text output received from model)"
 
-async def ask_o3_bd(user_prompt: str, research_context: str, effort: str = "high") -> str:
-    """BD-specific version of OpenAI o3 call with BD prompting."""
+async def ask_o3_bd(
+    user_prompt: str,
+    research_context: str,
+    effort: str = "high",
+    structured: Optional[bool] = None,
+    critique: Optional[bool] = None,
+    enable_tools: bool = True,
+) -> str:
+    """BD-specific version of OpenAI call with optional tool calling and structured output (JSON Schema rendered to Markdown)."""
     client = _openai_client()
-    resp = client.responses.create(
-        model="o3",
-        reasoning={"effort": effort},
-        input=[
+    use_structured = STRUCTURED_OUTPUT if structured is None else structured
+    use_critique = SELF_CRITIQUE if critique is None else critique
+
+    request_kwargs: Dict[str, Any] = {
+        "model": OPENAI_MODEL,
+        "reasoning": {"effort": effort},
+        "input": [
             {"role": "developer", "content": BD_DEV_MESSAGE},
             {"role": "user", "content": user_prompt + "\n\n" + research_context},
         ],
-        max_output_tokens=4000,  # Longer for BD reports
-    )
-    # The SDK exposes a convenience property; fall back if not present.
-    text = getattr(resp, "output_text", None)
-    if isinstance(text, str) and text.strip():
-        return text
-    # Fallback: assemble from content parts
+        "temperature": 0.2,
+        "max_output_tokens": 6000,
+    }
+    if use_structured:
+        request_kwargs["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "bd_intel_report", "schema": BD_REPORT_SCHEMA},
+        }
+    if enable_tools:
+        request_kwargs["tools"] = BD_TOOLS
+
+    # 1) Initial create
+    resp = client.responses.create(**request_kwargs)
+
+    # 2) If the model requested tools, execute them and continue until completion
     try:
-        parts = []
-        for item in getattr(resp, "output", []) or []:
-            if isinstance(item, dict):
-                for c in item.get("content", []) or []:
-                    if c.get("type") == "output_text" and c.get("text"):
-                        parts.append(c["text"])            
-        return "".join(parts) or json.dumps(resp.model_dump() if hasattr(resp, "model_dump") else resp, indent=2)
+        while True:
+            tool_calls = _extract_tool_calls(resp)
+            if not tool_calls:
+                break
+
+            tool_outputs = []
+            for call in tool_calls:
+                result = await _execute_tool_call(call["name"], call["arguments"])
+                tool_outputs.append({
+                    "tool_call_id": call["id"],
+                    "output": json.dumps(result),
+                })
+            # Submit tool outputs to continue the run
+            resp = client.responses.submit_tool_outputs(
+                response_id=getattr(resp, "id", None),
+                tool_outputs=tool_outputs
+            )
     except Exception:
-        return "(No text output received from model)"
+        # Proceed even if tool handling fails; the model output may still be useful
+        pass
+
+    # 3) Extract first draft
+    def _collect_text(r: Any) -> str:
+        text = getattr(r, "output_text", None)
+        if isinstance(text, str) and text.strip():
+            return text
+        parts: List[str] = []
+        for item in getattr(r, "output", []) or []:
+            for c in item.get("content", []) or []:
+                if c.get("type") in ("output_text", "message_text") and c.get("text"):
+                    parts.append(c["text"])
+        return "".join(parts)
+
+    first_text = _collect_text(resp)
+
+    # 4) If structured, try to parse JSON and optionally run critique pass
+    if use_structured:
+        try:
+            first_doc = json.loads(first_text) if first_text else {}
+        except Exception:
+            # If JSON parse fails, just return raw text
+            return first_text or "(No text output received from model)"
+
+        if use_critique:
+            critique_req: Dict[str, Any] = {
+                "model": OPENAI_MODEL,
+                "reasoning": {"effort": effort},
+                "input": [
+                    {"role": "developer", "content": BD_CRITIQUE_DEV_MESSAGE},
+                    {"role": "user", "content":
+                        "Improve the following draft BD report JSON while preserving schema and evidence.\n\n"
+                        "DRAFT_JSON:\n" + json.dumps(first_doc) + "\n\n"
+                        "RESEARCH_CONTEXT:\n" + research_context
+                    }
+                ],
+                "temperature": 0.2,
+                "max_output_tokens": 6000,
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {"name": "bd_intel_report", "schema": BD_REPORT_SCHEMA},
+                }
+            }
+            improved = client.responses.create(**critique_req)
+            improved_text = _collect_text(improved)
+            try:
+                improved_doc = json.loads(improved_text) if improved_text else {}
+                return _bd_json_to_markdown(improved_doc)
+            except Exception:
+                # If critique JSON fails to parse, fall back to first draft rendering
+                return _bd_json_to_markdown(first_doc)
+
+        # No critique: render first draft
+        return _bd_json_to_markdown(first_doc)
+
+    # 5) Non-structured path: optional critique to improve Markdown quality
+    if use_critique:
+        improved = client.responses.create(
+            model=OPENAI_MODEL,
+            reasoning={"effort": effort},
+            input=[
+                {"role": "developer", "content": CRITIQUE_MD_DEV_MESSAGE},
+                {"role": "user", "content":
+                    "Rewrite and improve the following draft while staying within the given research context.\n\n"
+                    "DRAFT_MARKDOWN:\n" + (first_text or "") + "\n\n"
+                    "RESEARCH_CONTEXT:\n" + research_context
+                }
+            ],
+            temperature=0.2,
+            max_output_tokens=6000,
+        )
+        improved_text = _collect_text(improved)
+        return improved_text or (first_text or "(No text output received from model)")
+
+    return first_text or "(No text output received from model)"
 
 ###############################################
 # HTML front-end (simple, self-contained)
