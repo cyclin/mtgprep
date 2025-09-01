@@ -153,32 +153,44 @@ Audience: Cro Metrics executives preparing for high-stakes external meetings.
 Tone: analytical, strategic, confident. Focus on actionable intelligence.
 
 ABOUT CRO METRICS:
-Cro Metrics is a leading conversion rate optimization (CRO) and digital analytics consultancy that helps enterprise companies dramatically improve their digital performance through data-driven experimentation and optimization.
+Cro Metrics is "Your Agency for All Things Digital Growth" - a leading conversion rate optimization and digital growth consultancy that designs strategic solutions to transform brands into growth engines. We help clients see stronger customer engagement and positive ROI within the first year.
 
-Key Differentiators:
-• Advanced A/B testing and multivariate testing expertise across web, mobile, and email channels
-• Proprietary testing methodology and statistical frameworks for reliable results
-• Deep expertise in analytics implementation (Google Analytics, Adobe Analytics, customer data platforms)
-• Conversion funnel optimization across the entire customer journey
-• Enterprise-grade testing infrastructure and program management
-• Proven ROI: typically 15-30% revenue increases through systematic optimization
-• Client portfolio includes Fortune 500 companies across retail, SaaS, financial services, and media
+Current Service Offerings (from https://crometrics.com/):
 
-Core Services:
-• Conversion Rate Optimization (CRO) programs and testing roadmaps
-• Digital analytics strategy, implementation, and optimization
-• Customer journey mapping and funnel analysis
-• Personalization and targeting strategy
-• Marketing technology stack optimization
-• Data governance and measurement frameworks
-• Executive training and capability building
+CORE SERVICES:
+• Analytics: Empower your team with unified data insights for full-funnel visibility and action
+• Conversion Rate Optimization: Uncover your strongest growth opportunities while mitigating risks before they impact your bottom line
+• Creative Services: Creative designed to captivate, convert, and drive growth results
+• Customer Journey Analysis: Transform fragmented customer data into actionable insights
+• Design and Build: From high-converting landing pages to (risk-free) re-platforming, and everything in between
+• Iris by Cro Metrics: A single platform to manage and maximize the impact of your growth program
+• Lifecycle and Email: Elevate loyalty and retention with cross-channel programs driving engagement and growth
+• Performance Marketing: Maximize ROAS with data-driven, multi-channel campaigns and clear attribution
 
-Competitive Advantages:
-• Statistical rigor and scientific approach to testing (not just "best practices")
-• Cross-channel optimization expertise (web, mobile, email, in-store)
-• Enterprise program management with dedicated teams
-• Proprietary tools and methodologies developed over 15+ years
-• Track record with household-name brands and complex digital ecosystems
+SPECIALIZED INDUSTRY EXPERTISE:
+• Subscription-based companies
+• E-Commerce/Retail
+• SaaS and Lead Generation
+• Hospitality
+• FinTech
+• B2B Lead Gen
+• Nonprofit & Associations
+
+PROVEN RESULTS & DIFFERENTIATORS:
+• $1B total client impact across portfolio
+• 97.4% retention rate with enterprise clients
+• 10X average ROI per client
+• 2X industry average for testing win rate
+• Scientific approach: "We Don't Guess, We Test"
+• Proprietary Iris platform for unified insights and predictive analysis
+• Google Partner and Meta Business Partner certifications
+
+CLIENT SUCCESS EXAMPLES:
+• Home Chef: Boosted revenue and long-term success
+• Curology: Creative that converts with data-driven design
+• Bombas: Increased testing velocity and overall ROI
+• Calendly: Access to best practices and strategies
+• UNICEF USA: Thorough attention to detail and big-picture understanding
 
 Guardrails
 - Use only the provided research context. If information is missing, mark it **Unknown** and suggest research priorities.
@@ -187,6 +199,8 @@ Guardrails
 - When making strategic assumptions, label them clearly and provide reasoning.
 - Pay special attention to attendee profiles and tailor recommendations to their specific backgrounds and priorities.
 - Always position Cro Metrics' capabilities in context of the target company's specific challenges and opportunities.
+- Map the target company's needs to specific Cro Metrics services from our current offerings above.
+- Reference relevant client success stories and industry expertise when applicable.
 
 Output (Markdown, use these headings exactly)
 1) Executive Summary
@@ -201,8 +215,9 @@ Output (Markdown, use these headings exactly)
    • How they compare to industry leaders, gaps we've identified, transformation maturity.
 5) Strategic Opportunity Assessment
    • Specific areas where Cro Metrics can add value, backed by evidence from research.
-   • Map opportunities to specific attendee interests and company priorities.
-   • Reference relevant Cro Metrics capabilities and past client successes.
+   • Map opportunities to specific Cro Metrics services: Analytics, CRO, Creative Services, Customer Journey Analysis, Design & Build, Iris platform, Lifecycle & Email, Performance Marketing.
+   • Reference relevant client success stories (Home Chef, Curology, Bombas, Calendly, UNICEF USA) when applicable.
+   • Consider industry-specific expertise if target company matches our specialized sectors.
 6) Meeting Dynamics & Strategy
    • How to navigate the group dynamic based on attendee profiles.
    • Recommended meeting flow and who to address for different topics.
@@ -218,7 +233,8 @@ Output (Markdown, use these headings exactly)
 9) Follow-up Action Plan
    • Specific next steps, timeline, and deliverables to propose.
    • Individual follow-up strategies for each attendee.
-   • Concrete Cro Metrics capabilities demonstrations (pilot tests, audits, etc.).
+   • Concrete Cro Metrics capabilities demonstrations: pilot tests, audits, Iris platform demos, analytics assessments, etc.
+   • Reference specific services that align with their needs and industry.
 10) Research Validation Needed
     • Facts to confirm, additional research priorities, intelligence gaps to fill.
     • Missing attendee information that could impact strategy.
@@ -234,21 +250,22 @@ Quality check (perform silently):
 
 BD_DEFAULT_PROMPT = """
 Create a strategic business development intelligence report using the research provided below.
-Focus on identifying specific opportunities where Cro Metrics can drive measurable business impact through our conversion rate optimization and digital analytics expertise.
+Focus on identifying specific opportunities where Cro Metrics can drive measurable business impact through our comprehensive digital growth services.
 
-Position Cro Metrics as the premier enterprise CRO consultancy with:
-• 15+ years of proven expertise with Fortune 500 companies
-• Proprietary testing methodologies and statistical frameworks
-• Track record of 15-30% revenue increases through systematic optimization
-• Cross-channel optimization capabilities (web, mobile, email, in-store)
-• Enterprise program management and dedicated team approach
+CRITICAL: Map the target company's specific needs and challenges to Cro Metrics' current service offerings listed in the system context above. Reference our proven results ($1B client impact, 97.4% retention rate, 10X ROI) and relevant client success stories when applicable.
+
+Position Cro Metrics as "Your Agency for All Things Digital Growth" with:
+• Comprehensive service portfolio: Analytics, CRO, Creative Services, Customer Journey Analysis, Design & Build, Iris platform, Lifecycle & Email, Performance Marketing
+• Industry-specific expertise matching their sector (Subscription, E-Commerce, SaaS, Hospitality, FinTech, B2B, Nonprofit)
+• Proven track record with brands like Home Chef, Curology, Bombas, Calendly, UNICEF USA
+• Proprietary Iris platform for unified insights and predictive analysis
+• Scientific approach: "We Don't Guess, We Test"
 
 Base all analysis on the research context provided. Mark gaps as **Unknown** and prioritize additional research needs.
-Position Cro Metrics as the strategic partner who understands their business and can accelerate their digital transformation goals through data-driven optimization.
 
 Pay special attention to the individual attendee profiles and tailor your strategic recommendations to address each person's likely priorities and concerns. Consider how the group dynamic might influence decision-making and recommend specific approaches for engaging each attendee effectively.
 
-Focus on opportunities where Cro Metrics' statistical rigor, enterprise experience, and proven methodologies can differentiate us from typical "optimization agencies" and position us as the strategic partner of choice.
+ALWAYS reference specific Cro Metrics services that align with their business challenges and demonstrate how our current offerings (as detailed on crometrics.com) can solve their specific problems. Use concrete examples from our client portfolio when relevant.
 """
 
 ###############################################
@@ -1878,12 +1895,14 @@ BD_INDEX_HTML = """
 
     <label for="prompt">Research Instructions</label>
     <textarea id="prompt">Create a strategic business development intelligence report using the research provided below.
-Focus on identifying specific opportunities where Cro Metrics can drive measurable business impact through our conversion rate optimization and digital analytics expertise.
+Focus on identifying specific opportunities where Cro Metrics can drive measurable business impact through our comprehensive digital growth services.
 
-Position Cro Metrics as the premier enterprise CRO consultancy with 15+ years of proven expertise, proprietary testing methodologies, and a track record of 15-30% revenue increases with Fortune 500 companies.
+CRITICAL: Map the target company's specific needs to Cro Metrics' current service offerings: Analytics, CRO, Creative Services, Customer Journey Analysis, Design & Build, Iris platform, Lifecycle & Email, Performance Marketing.
+
+Position Cro Metrics as "Your Agency for All Things Digital Growth" with $1B client impact, 97.4% retention rate, and 10X average ROI. Reference relevant client success stories (Home Chef, Curology, Bombas, Calendly, UNICEF USA) and industry expertise when applicable.
 
 Base all analysis on the research context provided. Mark gaps as **Unknown** and prioritize additional research needs.
-Focus on opportunities where Cro Metrics' statistical rigor, enterprise experience, and proven methodologies can differentiate us from typical "optimization agencies."</textarea>
+ALWAYS reference specific Cro Metrics services that align with their business challenges and demonstrate how our current offerings can solve their specific problems.</textarea>
 
     <div class="research-phase phase-complete" id="intelligence-phase" style="display: none;">
       <h3 style="margin-top: 0; color: var(--cro-green-700);">Phase 2: Generate Intelligence Report</h3>
