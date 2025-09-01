@@ -1042,16 +1042,20 @@ async def create_hubspot_contact(attendee_data: Dict[str, Any]) -> Optional[str]
 
 async def ask_o3(user_prompt: str, composed_context: str, effort: str = "high") -> str:
     client = _openai_client()
-    resp = client.responses.create(
-        model=OPENAI_MODEL,
-        reasoning={"effort": effort},
-        input=[
+    request_params = {
+        "model": OPENAI_MODEL,
+        "reasoning": {"effort": effort},
+        "input": [
             {"role": "developer", "content": DEV_MESSAGE},
             {"role": "user", "content": user_prompt + "\n\n" + composed_context},
         ],
-        temperature=0.2,
-        max_output_tokens=4000,
-    )
+        "max_output_tokens": 4000,
+    }
+    # o3-pro doesn't support temperature parameter
+    if OPENAI_MODEL != "o3-pro":
+        request_params["temperature"] = 0.2
+    
+    resp = client.responses.create(**request_params)
     # The SDK exposes a convenience property; fall back if not present.
     text = getattr(resp, "output_text", None)
     if isinstance(text, str) and text.strip():
@@ -1191,10 +1195,10 @@ async def ask_o3_bd(
 
     # 5) Non-structured path: optional critique to improve Markdown quality
     if use_critique:
-        improved = client.responses.create(
-            model=OPENAI_MODEL,
-            reasoning={"effort": effort},
-            input=[
+        critique_params = {
+            "model": OPENAI_MODEL,
+            "reasoning": {"effort": effort},
+            "input": [
                 {"role": "developer", "content": CRITIQUE_MD_DEV_MESSAGE},
                 {"role": "user", "content":
                     "Rewrite and improve the following draft while staying within the given research context.\n\n"
@@ -1202,9 +1206,13 @@ async def ask_o3_bd(
                     "RESEARCH_CONTEXT:\n" + research_context
                 }
             ],
-            temperature=0.2,
-            max_output_tokens=6000,
-        )
+            "max_output_tokens": 6000,
+        }
+        # o3-pro doesn't support temperature parameter
+        if OPENAI_MODEL != "o3-pro":
+            critique_params["temperature"] = 0.2
+            
+        improved = client.responses.create(**critique_params)
         improved_text = _collect_text(improved)
         return improved_text or (first_text or "(No text output received from model)")
 
