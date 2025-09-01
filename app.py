@@ -35,7 +35,7 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")  # For web search capabilities
 CURRENT_YEAR = datetime.now(timezone.utc).year
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "o3-pro")  # default to best reasoning; requires Responses API (falls back to chat if unavailable)
 STRUCTURED_OUTPUT = os.getenv("STRUCTURED_OUTPUT", "0") == "1"  # if true, ask BD model to return JSON to render
-SELF_CRITIQUE = os.getenv("SELF_CRITIQUE", "0") == "1"  # two-pass refinement OFF by default
+SELF_CRITIQUE = os.getenv("SELF_CRITIQUE", "1") == "1"  # two-pass refinement ON by default for testing
 
 if not OPENAI_API_KEY:
     # We'll raise at runtime if someone actually calls the endpoint, but keep server booting.
@@ -3048,6 +3048,57 @@ async def api_debug_hubspot_contact(contact_id: str) -> JSONResponse:
         return JSONResponse({
             "error": f"Debug failed: {str(e)}"
         }, status_code=500)
+
+@app.get("/api/debug/responses-api-test")
+async def api_debug_responses_test() -> JSONResponse:
+    """Test endpoint to check if Responses API is working"""
+    try:
+        client = _openai_client()
+        
+        # Simple test call to responses API
+        resp = client.responses.create(
+            model="o3-pro",
+            reasoning={"effort": "low"},
+            input=[
+                {"role": "developer", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Say 'Hello, Responses API is working!'"}
+            ],
+            temperature=0.1,
+            max_output_tokens=50,
+        )
+        
+        # Extract response text
+        output_text = getattr(resp, "output_text", None)
+        if not output_text:
+            # Try alternative extraction
+            parts = []
+            for item in getattr(resp, "output", []) or []:
+                for c in item.get("content", []) or []:
+                    if c.get("type") in ("output_text", "message_text") and c.get("text"):
+                        parts.append(c["text"])
+            output_text = "".join(parts)
+        
+        return JSONResponse({
+            "status": "success",
+            "api_working": True,
+            "response": output_text,
+            "model": "o3-pro",
+            "method": "responses.create"
+        })
+    except AttributeError as e:
+        return JSONResponse({
+            "status": "error",
+            "api_working": False,
+            "error": f"Responses API not available: {str(e)}",
+            "suggestion": "SDK may not support responses API"
+        })
+    except Exception as e:
+        return JSONResponse({
+            "status": "error", 
+            "api_working": False,
+            "error": f"API call failed: {str(e)}",
+            "error_type": type(e).__name__
+        })
 
 @app.post("/api/debug/prompt-preview")
 async def api_debug_prompt_preview(req: Request) -> JSONResponse:
