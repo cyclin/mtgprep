@@ -336,7 +336,7 @@ BD_TOOLS: List[Dict[str, Any]] = [
                 "query": {"type": "string"},
                 "num_results": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}
             },
-            "required": ["query"],
+            "required": ["query", "num_results"],
             "additionalProperties": False
         },
         "strict": True
