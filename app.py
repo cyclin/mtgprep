@@ -2841,7 +2841,11 @@ async def api_bd_generate(req: Request) -> JSONResponse:
     }, req)
 
     # 5) Generate BD intelligence report
-    report = await asyncio.wait_for(ask_o3_bd(prompt, composed_context, effort=effort), timeout=300.0)
+    try:
+        report = await asyncio.wait_for(ask_o3_bd(prompt, composed_context, effort=effort), timeout=300.0)
+    except Exception as e:
+        # Return the actual error for debugging
+        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
 
     return JSONResponse({
         "report_markdown": report,
