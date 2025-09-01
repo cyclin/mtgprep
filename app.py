@@ -1101,35 +1101,9 @@ async def ask_o3_bd(
     if enable_tools:
         request_kwargs["tools"] = BD_TOOLS
 
-    # 1) Initial create using responses API (with proper error handling)
-    try:
-        # Use responses API for advanced features like two-pass critique
-        resp = client.responses.create(**request_kwargs)
-        using_responses_api = True
-    except AttributeError:
-        # Only fallback if responses API is not available in the SDK
-        fallback_model = "gpt-4o" if request_kwargs["model"] == "o3-pro" else request_kwargs["model"]
-        
-        chat_kwargs = {
-            "model": fallback_model,
-            "messages": [
-                {"role": "system", "content": request_kwargs["input"][0]["content"]},
-                {"role": "user", "content": request_kwargs["input"][1]["content"]}
-            ],
-            "max_tokens": request_kwargs.get("max_output_tokens", 6000),
-        }
-        # Only add temperature if not using o3-pro (which doesn't support it)
-        if fallback_model != "o3-pro":
-            chat_kwargs["temperature"] = request_kwargs.get("temperature", 0.2)
-        # Add response_format and tools for chat completions if supported
-        if "response_format" in request_kwargs:
-            chat_kwargs["response_format"] = request_kwargs["response_format"]
-        if "tools" in request_kwargs and fallback_model != "o3-pro":
-            chat_kwargs["tools"] = request_kwargs["tools"]
-            
-        resp = client.chat.completions.create(**chat_kwargs)
-        using_responses_api = False
-    # Let all other exceptions (API errors, auth issues, etc.) bubble up properly
+    # 1) Initial create using responses API - no fallback, let errors surface
+    resp = client.responses.create(**request_kwargs)
+    using_responses_api = True
 
     # 2) Tool-calling loop (Responses API only)
     if using_responses_api and enable_tools:
@@ -1155,15 +1129,8 @@ async def ask_o3_bd(
             # Proceed even if tool handling fails; the model output may still be useful
             pass
 
-    # 3) Extract first draft
+    # 3) Extract first draft from responses API
     def _collect_text(r: Any) -> str:
-        # Handle standard chat completions response
-        if hasattr(r, 'choices') and r.choices:
-            choice = r.choices[0]
-            if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
-                return choice.message.content or ""
-        
-        # Handle responses API format
         text = getattr(r, "output_text", None)
         if isinstance(text, str) and text.strip():
             return text
