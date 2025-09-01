@@ -33,9 +33,9 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")  # For web search capabilities
 
 # Dynamic config and feature flags
 CURRENT_YEAR = datetime.now(timezone.utc).year
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")  # temporarily using stable model to debug issues
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "o3-pro")  # using o3-pro for best quality reasoning with responses API
 STRUCTURED_OUTPUT = os.getenv("STRUCTURED_OUTPUT", "0") == "1"  # if true, ask BD model to return JSON to render
-SELF_CRITIQUE = os.getenv("SELF_CRITIQUE", "0") == "1"  # two-pass refinement disabled temporarily due to errors
+SELF_CRITIQUE = os.getenv("SELF_CRITIQUE", "1") == "1"  # two-pass refinement enabled by default
 
 if not OPENAI_API_KEY:
     # We'll raise at runtime if someone actually calls the endpoint, but keep server booting.
@@ -1096,56 +1096,37 @@ async def ask_o3_bd(
             "type": "json_schema",
             "json_schema": {"name": "bd_intel_report", "schema": BD_REPORT_SCHEMA},
         }
-    # Temporarily disable tools to fix immediate issues
-    # if enable_tools:
-    #     request_kwargs["tools"] = BD_TOOLS
+    if enable_tools:
+        request_kwargs["tools"] = BD_TOOLS
 
-    # 1) Initial create - temporarily using chat completions instead of responses API
-    chat_kwargs = {
-        "model": request_kwargs["model"],
-        "messages": [
-            {"role": "system", "content": request_kwargs["input"][0]["content"]},
-            {"role": "user", "content": request_kwargs["input"][1]["content"]}
-        ],
-        "temperature": request_kwargs.get("temperature", 0.2),
-        "max_tokens": request_kwargs.get("max_output_tokens", 6000),
-    }
-    if "response_format" in request_kwargs:
-        chat_kwargs["response_format"] = request_kwargs["response_format"]
-    if "tools" in request_kwargs:
-        chat_kwargs["tools"] = request_kwargs["tools"]
-    
-    resp = client.chat.completions.create(**chat_kwargs)
+    # 1) Initial create using responses API
+    resp = client.responses.create(**request_kwargs)
 
-    # 2) Tool handling temporarily disabled
-    # try:
-    #     while True:
-    #         tool_calls = _extract_tool_calls(resp)
-    #         if not tool_calls:
-    #             break
-    #         tool_outputs = []
-    #         for call in tool_calls:
-    #             result = await _execute_tool_call(call["name"], call["arguments"])
-    #             tool_outputs.append({
-    #                 "tool_call_id": call["id"],
-    #                 "output": json.dumps(result),
-    #             })
-    #         resp = client.responses.submit_tool_outputs(
-    #             response_id=getattr(resp, "id", None),
-    #             tool_outputs=tool_outputs
-    #         )
-    # except Exception:
-    #     pass
+    # 2) If the model requested tools, execute them and continue until completion
+    try:
+        while True:
+            tool_calls = _extract_tool_calls(resp)
+            if not tool_calls:
+                break
+
+            tool_outputs = []
+            for call in tool_calls:
+                result = await _execute_tool_call(call["name"], call["arguments"])
+                tool_outputs.append({
+                    "tool_call_id": call["id"],
+                    "output": json.dumps(result),
+                })
+            # Submit tool outputs to continue the run
+            resp = client.responses.submit_tool_outputs(
+                response_id=getattr(resp, "id", None),
+                tool_outputs=tool_outputs
+            )
+    except Exception:
+        # Proceed even if tool handling fails; the model output may still be useful
+        pass
 
     # 3) Extract first draft
     def _collect_text(r: Any) -> str:
-        # Handle standard chat completions response
-        if hasattr(r, 'choices') and r.choices:
-            choice = r.choices[0]
-            if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
-                return choice.message.content or ""
-        
-        # Fallback for responses API format
         text = getattr(r, "output_text", None)
         if isinstance(text, str) and text.strip():
             return text
@@ -1185,18 +1166,7 @@ async def ask_o3_bd(
                     "json_schema": {"name": "bd_intel_report", "schema": BD_REPORT_SCHEMA},
                 }
             }
-            # Convert critique request to chat format
-            critique_chat = {
-                "model": critique_req["model"],
-                "messages": [
-                    {"role": "system", "content": critique_req["input"][0]["content"]},
-                    {"role": "user", "content": critique_req["input"][1]["content"]}
-                ],
-                "temperature": critique_req.get("temperature", 0.2),
-                "max_tokens": critique_req.get("max_output_tokens", 6000),
-                "response_format": critique_req["response_format"]
-            }
-            improved = client.chat.completions.create(**critique_chat)
+            improved = client.responses.create(**critique_req)
             improved_text = _collect_text(improved)
             try:
                 improved_doc = json.loads(improved_text) if improved_text else {}
