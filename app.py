@@ -348,7 +348,7 @@ BD_TOOLS: List[Dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
-                "url": {"type": "string", "format": "uri"}
+                "url": {"type": "string"}
             },
             "required": ["url"],
             "additionalProperties": False
