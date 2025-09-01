@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
+import logging
 
 import httpx
 import requests
@@ -32,6 +33,55 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")  # For web search capabilities
 if not OPENAI_API_KEY:
     # We'll raise at runtime if someone actually calls the endpoint, but keep server booting.
     pass
+
+###############################################
+# Usage Logging
+###############################################
+
+# Create persistent logs directory (survives deployments if using persistent storage)
+LOGS_DIR = os.getenv("LOGS_DIR", "/tmp/mtgprep_logs")
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+# Setup usage logger
+usage_logger = logging.getLogger("mtgprep_usage")
+usage_logger.setLevel(logging.INFO)
+
+# File handler for persistent logging
+usage_log_file = os.path.join(LOGS_DIR, "usage.log")
+file_handler = logging.FileHandler(usage_log_file, mode='a')
+file_handler.setLevel(logging.INFO)
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s | %(message)s')
+file_handler.setFormatter(formatter)
+
+# Add handler to logger
+if not usage_logger.handlers:
+    usage_logger.addHandler(file_handler)
+
+def log_usage(event_type: str, data: Dict[str, Any], request: Request = None):
+    """Log usage events for analysis."""
+    try:
+        # Get client IP if request provided
+        client_ip = "unknown"
+        if request:
+            client_ip = request.client.host if request.client else "unknown"
+            # Check for forwarded IP (common in production deployments)
+            forwarded_for = request.headers.get("x-forwarded-for")
+            if forwarded_for:
+                client_ip = forwarded_for.split(",")[0].strip()
+        
+        log_entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event_type": event_type,
+            "client_ip": client_ip,
+            "data": data
+        }
+        
+        usage_logger.info(json.dumps(log_entry))
+    except Exception as e:
+        # Don't let logging errors break the application
+        print(f"Logging error: {e}")
 
 DEV_MESSAGE = """
 You are CROmetrics’ Executive Meeting Copilot.
@@ -1896,11 +1946,9 @@ Position CROmetrics as the strategic partner who understands their business and 
                   ℹ️ <strong>Not in HubSpot</strong> - Add button will appear below
                 </div>
               `;
-              // Show HubSpot button if not in HubSpot and has email
-              if (attendee.email) {
-                hubspotBtn.style.display = 'inline-block';
-                actionsEl.style.display = 'flex';
-              }
+              // Show HubSpot button if not in HubSpot (email not required)
+              hubspotBtn.style.display = 'inline-block';
+              actionsEl.style.display = 'flex';
             }
             
             // LinkedIn Information
@@ -2269,6 +2317,16 @@ async def api_bd_generate(req: Request) -> JSONResponse:
         f"RESEARCH INTELLIGENCE:\n{research_context}"
     )
 
+    # Log intelligence report generation
+    log_usage("intelligence_report", {
+        "company_name": company_name,
+        "industry": industry,
+        "attendee_count": len(enriched_attendees),
+        "effort": effort,
+        "prompt_length": len(prompt),
+        "context_length": len(composed_context)
+    }, req)
+
     # 5) Generate BD intelligence report
     report = await asyncio.wait_for(ask_o3_bd(prompt, composed_context, effort=effort), timeout=300.0)
 
@@ -2296,6 +2354,14 @@ async def api_bd_research_attendees(req: Request) -> JSONResponse:
     
     target_company = payload.get("target_company", "").strip()
     check_hubspot = payload.get("check_hubspot", True)
+    
+    # Log usage for analytics
+    log_usage("attendee_research", {
+        "target_company": target_company,
+        "attendee_count": len(attendees_data),
+        "attendees": [{"name": a.get("name"), "title": a.get("title"), "company": a.get("company")} for a in attendees_data],
+        "check_hubspot": check_hubspot
+    }, req)
     
     # Research each attendee
     enriched_attendees = []
@@ -2370,6 +2436,15 @@ async def api_bd_add_to_hubspot(req: Request) -> JSONResponse:
     if not attendee_data.get("name"):
         raise HTTPException(status_code=400, detail="Attendee name is required")
     
+    # Log HubSpot contact creation
+    log_usage("hubspot_contact_add", {
+        "name": attendee_data.get("name"),
+        "title": attendee_data.get("title"),
+        "company": attendee_data.get("company"),
+        "has_email": bool(attendee_data.get("email")),
+        "has_linkedin": bool(attendee_data.get("linkedin_url"))
+    }, req)
+    
     contact_id = await create_hubspot_contact(attendee_data)
     
     if contact_id:
@@ -2383,6 +2458,43 @@ async def api_bd_add_to_hubspot(req: Request) -> JSONResponse:
             "success": False,
             "message": "Failed to create HubSpot contact"
         }, status_code=400)
+
+@app.get("/api/usage-logs")
+async def api_usage_logs(req: Request) -> JSONResponse:
+    """View usage logs for analysis (last 100 entries)."""
+    try:
+        if not os.path.exists(usage_log_file):
+            return JSONResponse({"logs": [], "message": "No usage logs found"})
+        
+        # Read the last 100 lines of the log file
+        with open(usage_log_file, 'r') as f:
+            lines = f.readlines()
+        
+        # Get last 100 lines and parse as JSON
+        recent_lines = lines[-100:] if len(lines) > 100 else lines
+        logs = []
+        
+        for line in recent_lines:
+            try:
+                # Parse the log entry (format: timestamp | json_data)
+                if ' | ' in line:
+                    timestamp_str, json_str = line.split(' | ', 1)
+                    log_data = json.loads(json_str.strip())
+                    logs.append(log_data)
+            except (json.JSONDecodeError, ValueError):
+                continue
+        
+        return JSONResponse({
+            "logs": logs,
+            "total_entries": len(logs),
+            "log_file_path": usage_log_file
+        })
+        
+    except Exception as e:
+        return JSONResponse({
+            "error": str(e),
+            "message": "Failed to read usage logs"
+        }, status_code=500)
 
 @app.post("/api/run")
 async def api_run(req: Request) -> JSONResponse:
