@@ -441,35 +441,67 @@ async def search_hubspot_contact_by_name(name: str, company: str = "") -> Option
         first_name = name_parts[0]
         last_name = " ".join(name_parts[1:])
         
-        # Search by first name AND last name
-        filters = [
-            {"propertyName": "firstname", "operator": "EQ", "value": first_name},
-            {"propertyName": "lastname", "operator": "EQ", "value": last_name}
+        # Try multiple search strategies to handle variations
+        search_strategies = [
+            # Strategy 1: Exact match with company
+            {
+                "filters": [
+                    {"propertyName": "firstname", "operator": "EQ", "value": first_name},
+                    {"propertyName": "lastname", "operator": "EQ", "value": last_name},
+                    {"propertyName": "company", "operator": "EQ", "value": company}
+                ] if company else [
+                    {"propertyName": "firstname", "operator": "EQ", "value": first_name},
+                    {"propertyName": "lastname", "operator": "EQ", "value": last_name}
+                ]
+            },
+            # Strategy 2: Just name match (no company filter)
+            {
+                "filters": [
+                    {"propertyName": "firstname", "operator": "EQ", "value": first_name},
+                    {"propertyName": "lastname", "operator": "EQ", "value": last_name}
+                ]
+            },
+            # Strategy 3: Contains match for first name (handles Pete/Peter variations)
+            {
+                "filters": [
+                    {"propertyName": "firstname", "operator": "CONTAINS_TOKEN", "value": first_name[:4]},  # First 4 chars
+                    {"propertyName": "lastname", "operator": "EQ", "value": last_name}
+                ]
+            }
         ]
         
-        # Add company filter if provided
-        if company:
-            filters.append({"propertyName": "company", "operator": "EQ", "value": company})
-        
-        payload = {
-            "filterGroups": [{"filters": filters}],
-            "properties": props,
-            "limit": 5,  # Get multiple matches to handle variations
-        }
-        
-        data = await hubspot_post("/crm/v3/objects/contacts/search", payload)
-        results = data.get("results", [])
-        
-        if results:
-            # Return the first match (or could implement scoring logic)
-            contact = results[0]
-            props_row = contact.get("properties", {})
-            props_row["_id"] = contact.get("id")
-            return props_row
+        # Try each strategy until we find a match
+        for strategy in search_strategies:
+            payload = {
+                "filterGroups": [strategy],
+                "properties": props,
+                "limit": 10,  # Get more matches to handle variations
+            }
+            
+            data = await hubspot_post("/crm/v3/objects/contacts/search", payload)
+            results = data.get("results", [])
+            
+            if results:
+                # If we have company info, prefer matches with matching company
+                if company:
+                    for result in results:
+                        result_company = result.get("properties", {}).get("company", "")
+                        if company.lower() in result_company.lower() or result_company.lower() in company.lower():
+                            props_row = result.get("properties", {})
+                            props_row["_id"] = result.get("id")
+                            return props_row
+                
+                # Otherwise return the first match
+                contact = results[0]
+                props_row = contact.get("properties", {})
+                props_row["_id"] = contact.get("id")
+                return props_row
         
         return None
         
-    except Exception:
+    except Exception as e:
+        # Log the exception for debugging
+        print(f"HubSpot search error: {e}")
         return None
 
 async def find_hubspot_contact(name: str, email: str = "", company: str = "") -> Optional[Dict[str, Any]]:
