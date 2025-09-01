@@ -33,9 +33,9 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")  # For web search capabilities
 
 # Dynamic config and feature flags
 CURRENT_YEAR = datetime.now(timezone.utc).year
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "o3-pro")  # default to best quality reasoning model
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")  # temporarily using stable model to debug issues
 STRUCTURED_OUTPUT = os.getenv("STRUCTURED_OUTPUT", "0") == "1"  # if true, ask BD model to return JSON to render
-SELF_CRITIQUE = os.getenv("SELF_CRITIQUE", "1") == "1"  # two-pass refinement enabled by default
+SELF_CRITIQUE = os.getenv("SELF_CRITIQUE", "0") == "1"  # two-pass refinement disabled temporarily due to errors
 
 if not OPENAI_API_KEY:
     # We'll raise at runtime if someone actually calls the endpoint, but keep server booting.
