@@ -1088,9 +1088,11 @@ async def ask_o3_bd(
             {"role": "developer", "content": BD_DEV_MESSAGE},
             {"role": "user", "content": user_prompt + "\n\n" + research_context},
         ],
-        "temperature": 0.2,
         "max_output_tokens": 6000,
     }
+    # o3-pro doesn't support temperature parameter
+    if OPENAI_MODEL != "o3-pro":
+        request_kwargs["temperature"] = 0.2
     if use_structured:
         request_kwargs["response_format"] = {
             "type": "json_schema",
@@ -1194,13 +1196,15 @@ async def ask_o3_bd(
                             "RESEARCH_CONTEXT:\n" + research_context
                         }
                     ],
-                    "temperature": 0.2,
                     "max_output_tokens": 6000,
                     "response_format": {
                         "type": "json_schema",
                         "json_schema": {"name": "bd_intel_report", "schema": BD_REPORT_SCHEMA},
                     }
                 }
+                # o3-pro doesn't support temperature parameter
+                if OPENAI_MODEL != "o3-pro":
+                    critique_req["temperature"] = 0.2
                 improved = client.responses.create(**critique_req)
                 improved_text = _collect_text(improved)
                 try:
@@ -3063,7 +3067,6 @@ async def api_debug_responses_test() -> JSONResponse:
                 {"role": "developer", "content": "You are a helpful assistant."},
                 {"role": "user", "content": "Say 'Hello, Responses API is working!'"}
             ],
-            temperature=0.1,
             max_output_tokens=50,
         )
         
