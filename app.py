@@ -2563,6 +2563,44 @@ async def api_usage_logs(req: Request) -> JSONResponse:
             "message": "Failed to read usage logs"
         }, status_code=500)
 
+@app.get("/api/debug/hubspot/{contact_id}")
+async def api_debug_hubspot_contact(contact_id: str) -> JSONResponse:
+    """Debug endpoint to inspect a specific HubSpot contact."""
+    if not HUBSPOT_TOKEN:
+        return JSONResponse({"error": "HubSpot token not configured"}, status_code=400)
+    
+    try:
+        headers = {"Authorization": f"Bearer {HUBSPOT_TOKEN}", "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(f"{HUBSPOT_API_BASE}/crm/v3/objects/contacts/{contact_id}", headers=headers)
+            
+            if resp.status_code == 200:
+                contact_data = resp.json()
+                properties = contact_data.get("properties", {})
+                
+                return JSONResponse({
+                    "contact_id": contact_id,
+                    "properties": properties,
+                    "debug_info": {
+                        "firstname": properties.get("firstname"),
+                        "lastname": properties.get("lastname"), 
+                        "email": properties.get("email"),
+                        "company": properties.get("company"),
+                        "jobtitle": properties.get("jobtitle"),
+                        "linkedin_url": properties.get("linkedin_url")
+                    }
+                })
+            else:
+                return JSONResponse({
+                    "error": f"HubSpot API error: {resp.status_code}",
+                    "response": resp.text[:300]
+                }, status_code=400)
+                
+    except Exception as e:
+        return JSONResponse({
+            "error": f"Debug failed: {str(e)}"
+        }, status_code=500)
+
 @app.post("/api/run")
 async def api_run(req: Request) -> JSONResponse:
     payload = await req.json()
