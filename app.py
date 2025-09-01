@@ -416,6 +416,79 @@ async def fetch_contacts_by_email(emails: List[str]) -> List[Dict[str, Any]]:
             results.append(props_row)
     return results
 
+async def search_hubspot_contact_by_name(name: str, company: str = "") -> Optional[Dict[str, Any]]:
+    """Search HubSpot for a contact by name and optionally company to prevent duplicates."""
+    if not HUBSPOT_TOKEN or not name:
+        return None
+    
+    try:
+        props = [
+            "email",
+            "firstname", 
+            "lastname",
+            "jobtitle",
+            "company",
+            "lifecyclestage",
+            "linkedin_url",
+            "hs_object_id",
+        ]
+        
+        # Split name into first and last
+        name_parts = name.strip().split()
+        if len(name_parts) < 2:
+            return None
+            
+        first_name = name_parts[0]
+        last_name = " ".join(name_parts[1:])
+        
+        # Search by first name AND last name
+        filters = [
+            {"propertyName": "firstname", "operator": "EQ", "value": first_name},
+            {"propertyName": "lastname", "operator": "EQ", "value": last_name}
+        ]
+        
+        # Add company filter if provided
+        if company:
+            filters.append({"propertyName": "company", "operator": "EQ", "value": company})
+        
+        payload = {
+            "filterGroups": [{"filters": filters}],
+            "properties": props,
+            "limit": 5,  # Get multiple matches to handle variations
+        }
+        
+        data = await hubspot_post("/crm/v3/objects/contacts/search", payload)
+        results = data.get("results", [])
+        
+        if results:
+            # Return the first match (or could implement scoring logic)
+            contact = results[0]
+            props_row = contact.get("properties", {})
+            props_row["_id"] = contact.get("id")
+            return props_row
+        
+        return None
+        
+    except Exception:
+        return None
+
+async def find_hubspot_contact(name: str, email: str = "", company: str = "") -> Optional[Dict[str, Any]]:
+    """Enhanced contact finder that searches by both email and name to prevent duplicates."""
+    
+    # First try email search if email is provided
+    if email:
+        email_results = await fetch_contacts_by_email([email])
+        if email_results:
+            return email_results[0]
+    
+    # If no email match, try name search
+    if name:
+        name_result = await search_hubspot_contact_by_name(name, company)
+        if name_result:
+            return name_result
+    
+    return None
+
 ###############################################
 # BD Research helpers
 ###############################################
@@ -628,21 +701,31 @@ async def research_attendee_background(name: str, company_name: str, title: str 
     return research_data
 
 async def create_hubspot_contact(attendee_data: Dict[str, Any]) -> Optional[str]:
-    """Create a new contact in HubSpot and return the contact ID."""
+    """Create a new contact in HubSpot after checking for duplicates."""
     if not HUBSPOT_TOKEN:
         return None
     
     try:
+        name = attendee_data.get("name", "")
+        email = attendee_data.get("email", "")
+        company = attendee_data.get("company", "")
+        
+        # Double-check for existing contact before creating
+        existing_contact = await find_hubspot_contact(name, email, company)
+        if existing_contact:
+            # Return existing contact ID instead of creating duplicate
+            return existing_contact.get("_id") or existing_contact.get("id")
+        
         properties = {
-            "firstname": attendee_data.get("name", "").split()[0] if attendee_data.get("name") else "",
-            "lastname": " ".join(attendee_data.get("name", "").split()[1:]) if attendee_data.get("name") and len(attendee_data.get("name", "").split()) > 1 else "",
+            "firstname": name.split()[0] if name else "",
+            "lastname": " ".join(name.split()[1:]) if name and len(name.split()) > 1 else "",
             "jobtitle": attendee_data.get("title", ""),
-            "company": attendee_data.get("company", ""),
+            "company": company,
         }
         
         # Add email if available
-        if attendee_data.get("email"):
-            properties["email"] = attendee_data["email"]
+        if email:
+            properties["email"] = email
         
         # Add LinkedIn URL if available
         if attendee_data.get("linkedin_url"):
@@ -2181,13 +2264,11 @@ async def api_bd_generate(req: Request) -> JSONResponse:
                 "background_research": None
             }
             
-            # Check if this attendee exists in HubSpot
-            if email and hubspot_contacts:
-                for contact in hubspot_contacts:
-                    if contact.get("email", "").lower() == email.lower():
-                        enriched_attendee["hubspot_contact"] = contact
-                        enriched_attendee["linkedin_url"] = contact.get("linkedin_url")
-                        break
+            # Check if this attendee exists in HubSpot (enhanced search)
+            hubspot_contact = await find_hubspot_contact(name, email, company_name)
+            if hubspot_contact:
+                enriched_attendee["hubspot_contact"] = hubspot_contact
+                enriched_attendee["linkedin_url"] = hubspot_contact.get("linkedin_url")
             
             # LinkedIn discovery if not already found in HubSpot
             if not enriched_attendee["linkedin_url"]:
@@ -2385,13 +2466,11 @@ async def api_bd_research_attendees(req: Request) -> JSONResponse:
             "background_research": None
         }
         
-        # Check if this attendee exists in HubSpot
-        if email and hubspot_contacts:
-            for contact in hubspot_contacts:
-                if contact.get("email", "").lower() == email.lower():
-                    enriched_attendee["hubspot_contact"] = contact
-                    enriched_attendee["linkedin_url"] = contact.get("linkedin_url")
-                    break
+        # Check if this attendee exists in HubSpot (enhanced search)
+        hubspot_contact = await find_hubspot_contact(name, email, company)
+        if hubspot_contact:
+            enriched_attendee["hubspot_contact"] = hubspot_contact
+            enriched_attendee["linkedin_url"] = hubspot_contact.get("linkedin_url")
         
         # LinkedIn discovery if not already found in HubSpot
         if not enriched_attendee["linkedin_url"]:
