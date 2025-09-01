@@ -2712,6 +2712,107 @@ async def api_debug_hubspot_contact(contact_id: str) -> JSONResponse:
             "error": f"Debug failed: {str(e)}"
         }, status_code=500)
 
+@app.post("/api/debug/prompt-preview")
+async def api_debug_prompt_preview(req: Request) -> JSONResponse:
+    """Debug endpoint to see the exact prompt being sent to OpenAI."""
+    payload = await req.json()
+    
+    try:
+        # Handle both researched attendees and legacy format
+        researched_attendees = payload.get("researched_attendees", [])
+        if not researched_attendees:
+            # Legacy format conversion
+            attendees_data = payload.get("attendees", [])
+            if not attendees_data:
+                executive_name = payload.get("executive_name", "")
+                executive_title = payload.get("executive_title", "")
+                if executive_name:
+                    attendees_data = [{"name": executive_name, "title": executive_title, "email": ""}]
+            
+            # Convert to researched format for preview
+            researched_attendees = []
+            for attendee in attendees_data:
+                researched_attendees.append({
+                    "name": attendee.get("name", ""),
+                    "title": attendee.get("title", ""),
+                    "company": attendee.get("company", "") or payload.get("company_name", ""),
+                    "email": attendee.get("email", ""),
+                    "linkedin_url": "https://linkedin.com/in/example-for-preview",
+                    "linkedin_snippet": "Example LinkedIn snippet for prompt preview",
+                    "hubspot_contact": None,
+                    "background_research": {"background_info": [{"title": "Example background research", "snippet": "Sample professional background"}]}
+                })
+        
+        company_name = payload.get("company_name", "Example Company")
+        industry = payload.get("industry", "Technology")
+        meeting_context = payload.get("meeting_context", "Example meeting context")
+        prompt = payload.get("prompt", BD_DEFAULT_PROMPT)
+        
+        # Build the same research context that would be sent to OpenAI
+        research_sections = []
+        
+        # Company overview (simulated)
+        research_sections.append("## Company Overview Research")
+        research_sections.append("**Example Company - Strategic Overview**")
+        research_sections.append("Source: https://example.com")
+        research_sections.append("Example company research snippet showing business model and priorities...")
+        research_sections.append("")
+        
+        # Attendee profiles
+        if researched_attendees:
+            research_sections.append("## Meeting Attendee Profiles")
+            for attendee in researched_attendees:
+                research_sections.append(f"### {attendee['name']}")
+                research_sections.append(f"**Title:** {attendee['title'] or 'Not specified'}")
+                research_sections.append(f"**Email:** {attendee['email'] or 'Not provided'}")
+                if attendee['linkedin_url']:
+                    research_sections.append(f"**LinkedIn:** {attendee['linkedin_url']}")
+                
+                if attendee['hubspot_contact']:
+                    research_sections.append("**HubSpot Status:** Existing contact found")
+                else:
+                    research_sections.append("**HubSpot Status:** Not in HubSpot")
+                
+                if attendee.get('background_research'):
+                    research_sections.append("**Professional Background:**")
+                    research_sections.append("- Example background research data")
+                
+                research_sections.append("")
+        
+        research_context = "\n".join(research_sections)
+        
+        # Compose the full context exactly as sent to OpenAI
+        attendee_summary = ", ".join([f"{a['name']} ({a['title'] or 'Title TBD'})" for a in researched_attendees])
+        composed_context = (
+            f"TARGET COMPANY: {company_name}\n"
+            f"MEETING ATTENDEES: {attendee_summary}\n"
+            f"INDUSTRY: {industry or 'Not specified'}\n"
+            f"MEETING CONTEXT: {meeting_context or 'Not provided'}\n\n"
+            f"RESEARCH INTELLIGENCE:\n{research_context}"
+        )
+        
+        # Return the exact prompt structure sent to OpenAI
+        return JSONResponse({
+            "system_message": BD_DEV_MESSAGE,
+            "user_prompt": prompt,
+            "research_context": composed_context,
+            "full_prompt_preview": {
+                "role_developer": BD_DEV_MESSAGE,
+                "role_user": prompt + "\n\n" + composed_context
+            },
+            "prompt_stats": {
+                "system_message_length": len(BD_DEV_MESSAGE),
+                "user_prompt_length": len(prompt),
+                "research_context_length": len(composed_context),
+                "total_length": len(BD_DEV_MESSAGE) + len(prompt) + len(composed_context)
+            }
+        })
+        
+    except Exception as e:
+        return JSONResponse({
+            "error": f"Prompt preview failed: {str(e)}"
+        }, status_code=500)
+
 @app.post("/api/run")
 async def api_run(req: Request) -> JSONResponse:
     payload = await req.json()
