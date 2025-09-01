@@ -1099,8 +1099,29 @@ async def ask_o3_bd(
     if enable_tools:
         request_kwargs["tools"] = BD_TOOLS
 
-    # 1) Initial create using responses API
-    resp = client.responses.create(**request_kwargs)
+    # 1) Initial create - try responses API first, fallback to chat completions
+    try:
+        # Try responses API for advanced features like two-pass critique
+        resp = client.responses.create(**request_kwargs)
+        using_responses_api = True
+    except (AttributeError, Exception) as e:
+        # Fallback to chat completions if responses API not available
+        chat_kwargs = {
+            "model": request_kwargs["model"],
+            "messages": [
+                {"role": "system", "content": request_kwargs["input"][0]["content"]},
+                {"role": "user", "content": request_kwargs["input"][1]["content"]}
+            ],
+            "temperature": request_kwargs.get("temperature", 0.2),
+            "max_tokens": request_kwargs.get("max_output_tokens", 6000),
+        }
+        if "response_format" in request_kwargs:
+            chat_kwargs["response_format"] = request_kwargs["response_format"]
+        if "tools" in request_kwargs:
+            chat_kwargs["tools"] = request_kwargs["tools"]
+        
+        resp = client.chat.completions.create(**chat_kwargs)
+        using_responses_api = False
 
     # 2) If the model requested tools, execute them and continue until completion
     try:
@@ -1127,6 +1148,13 @@ async def ask_o3_bd(
 
     # 3) Extract first draft
     def _collect_text(r: Any) -> str:
+        # Handle standard chat completions response
+        if hasattr(r, 'choices') and r.choices:
+            choice = r.choices[0]
+            if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
+                return choice.message.content or ""
+        
+        # Handle responses API format
         text = getattr(r, "output_text", None)
         if isinstance(text, str) and text.strip():
             return text
@@ -1147,32 +1175,37 @@ async def ask_o3_bd(
             # If JSON parse fails, just return raw text
             return first_text or "(No text output received from model)"
 
-        if use_critique:
-            critique_req: Dict[str, Any] = {
-                "model": OPENAI_MODEL,
-                "reasoning": {"effort": effort},
-                "input": [
-                    {"role": "developer", "content": BD_CRITIQUE_DEV_MESSAGE},
-                    {"role": "user", "content":
-                        "Improve the following draft BD report JSON while preserving schema and evidence.\n\n"
-                        "DRAFT_JSON:\n" + json.dumps(first_doc) + "\n\n"
-                        "RESEARCH_CONTEXT:\n" + research_context
-                    }
-                ],
-                "temperature": 0.2,
-                "max_output_tokens": 6000,
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {"name": "bd_intel_report", "schema": BD_REPORT_SCHEMA},
-                }
-            }
-            improved = client.responses.create(**critique_req)
-            improved_text = _collect_text(improved)
+        if use_critique and using_responses_api:
+            # Two-pass critique only works with responses API
             try:
-                improved_doc = json.loads(improved_text) if improved_text else {}
-                return _bd_json_to_markdown(improved_doc)
+                critique_req: Dict[str, Any] = {
+                    "model": OPENAI_MODEL,
+                    "reasoning": {"effort": effort},
+                    "input": [
+                        {"role": "developer", "content": BD_CRITIQUE_DEV_MESSAGE},
+                        {"role": "user", "content":
+                            "Improve the following draft BD report JSON while preserving schema and evidence.\n\n"
+                            "DRAFT_JSON:\n" + json.dumps(first_doc) + "\n\n"
+                            "RESEARCH_CONTEXT:\n" + research_context
+                        }
+                    ],
+                    "temperature": 0.2,
+                    "max_output_tokens": 6000,
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {"name": "bd_intel_report", "schema": BD_REPORT_SCHEMA},
+                    }
+                }
+                improved = client.responses.create(**critique_req)
+                improved_text = _collect_text(improved)
+                try:
+                    improved_doc = json.loads(improved_text) if improved_text else {}
+                    return _bd_json_to_markdown(improved_doc)
+                except Exception:
+                    # If critique JSON fails to parse, fall back to first draft rendering
+                    return _bd_json_to_markdown(first_doc)
             except Exception:
-                # If critique JSON fails to parse, fall back to first draft rendering
+                # If critique request fails, return original
                 return _bd_json_to_markdown(first_doc)
 
         # No critique: render first draft
