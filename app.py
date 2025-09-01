@@ -1704,15 +1704,6 @@ BD_INDEX_HTML = """
       </div>
     </div>
 
-    <label for="meeting_context">Meeting Context & Objectives</label>
-    <textarea id="meeting_context" placeholder="External BD meeting to explore partnership opportunities. Focus on digital transformation, data analytics, and consumer insights capabilities..."></textarea>
-
-    <label for="prompt">Research Instructions</label>
-    <textarea id="prompt">Create a strategic business development intelligence report using the research provided below.
-Focus on identifying specific opportunities where CROmetrics can drive measurable business impact.
-Base all analysis on the research context provided. Mark gaps as **Unknown** and prioritize additional research needs.
-Position CROmetrics as the strategic partner who understands their business and can accelerate their transformation goals.</textarea>
-
     <div class="research-phase" id="research-phase">
       <h3 style="margin-top: 0; color: var(--cro-yellow-700);">Phase 1: Research Attendees</h3>
       <p class="muted">First, let's research each attendee to gather their LinkedIn profiles and professional background.</p>
@@ -1721,6 +1712,15 @@ Position CROmetrics as the strategic partner who understands their business and 
         <div id="research-status" class="muted" style="align-self: center; margin-left: 1rem;"></div>
       </div>
     </div>
+
+    <label for="meeting_context">Meeting Context & Objectives</label>
+    <textarea id="meeting_context" placeholder="External BD meeting to explore partnership opportunities. Focus on digital transformation, data analytics, and consumer insights capabilities..."></textarea>
+
+    <label for="prompt">Research Instructions</label>
+    <textarea id="prompt">Create a strategic business development intelligence report using the research provided below.
+Focus on identifying specific opportunities where CROmetrics can drive measurable business impact.
+Base all analysis on the research context provided. Mark gaps as **Unknown** and prioritize additional research needs.
+Position CROmetrics as the strategic partner who understands their business and can accelerate their transformation goals.</textarea>
 
     <div class="research-phase phase-complete" id="intelligence-phase" style="display: none;">
       <h3 style="margin-top: 0; color: var(--cro-green-700);">Phase 2: Generate Intelligence Report</h3>
