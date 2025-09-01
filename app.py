@@ -1116,9 +1116,11 @@ async def ask_o3_bd(
                 {"role": "system", "content": request_kwargs["input"][0]["content"]},
                 {"role": "user", "content": request_kwargs["input"][1]["content"]}
             ],
-            "temperature": request_kwargs.get("temperature", 0.2),
             "max_tokens": request_kwargs.get("max_output_tokens", 6000),
         }
+        # Only add temperature if not using o3-pro (which doesn't support it)
+        if fallback_model != "o3-pro":
+            chat_kwargs["temperature"] = request_kwargs.get("temperature", 0.2)
         # Add response_format and tools for chat completions if supported
         if "response_format" in request_kwargs:
             chat_kwargs["response_format"] = request_kwargs["response_format"]
