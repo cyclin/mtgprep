@@ -365,7 +365,7 @@ BD_TOOLS: List[Dict[str, Any]] = [
                 "name": {"type": "string"},
                 "company": {"type": "string"}
             },
-            "required": ["name"],
+            "required": ["name", "company"],
             "additionalProperties": False
         },
         "strict": True
@@ -377,7 +377,7 @@ BD_TOOLS: List[Dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
-                "email": {"type": "string", "format": "email"}
+                "email": {"type": "string"}
             },
             "required": ["email"],
             "additionalProperties": False
