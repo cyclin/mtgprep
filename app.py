@@ -1099,14 +1099,13 @@ async def ask_o3_bd(
     if enable_tools:
         request_kwargs["tools"] = BD_TOOLS
 
-    # 1) Initial create - try responses API first, fallback to chat completions
+    # 1) Initial create using responses API (with proper error handling)
     try:
-        # Try responses API for advanced features like two-pass critique
+        # Use responses API for advanced features like two-pass critique
         resp = client.responses.create(**request_kwargs)
         using_responses_api = True
-    except (AttributeError, Exception) as e:
-        # Fallback to chat completions if responses API not available or model not supported
-        # If o3-pro fails, try with gpt-4o for compatibility
+    except AttributeError:
+        # Only fallback if responses API is not available in the SDK
         fallback_model = "gpt-4o" if request_kwargs["model"] == "o3-pro" else request_kwargs["model"]
         
         chat_kwargs = {
@@ -1126,6 +1125,7 @@ async def ask_o3_bd(
             
         resp = client.chat.completions.create(**chat_kwargs)
         using_responses_api = False
+    # Let all other exceptions (API errors, auth issues, etc.) bubble up properly
 
     # 2) Tool-calling loop (Responses API only)
     if using_responses_api and enable_tools:
