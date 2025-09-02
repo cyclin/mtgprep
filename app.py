@@ -418,27 +418,55 @@ def _extract_tool_calls(resp: Any) -> List[Dict[str, Any]]:
     calls: List[Dict[str, Any]] = []
     # Pattern 1: traverse output -> content list
     for item in getattr(resp, "output", []) or []:
-        for c in item.get("content", []) or []:
-            t = c.get("type")
-            if t in ("tool_call", "tool_use"):
+        # Handle both dict-like and object-like items
+        content_list = []
+        if hasattr(item, 'content'):
+            content_list = item.content or []
+        elif isinstance(item, dict):
+            content_list = item.get("content", []) or []
+            
+        for c in content_list:
+            # Handle both dict-like and object-like content items
+            if hasattr(c, 'type'):
+                t = c.type
+                call_id = getattr(c, 'id', None) or getattr(c, 'tool_call_id', None) or ""
+                name = getattr(c, 'name', None)
+                args = getattr(c, 'arguments', None) or {}
+            elif isinstance(c, dict):
+                t = c.get("type")
                 call_id = c.get("id") or c.get("tool_call_id") or ""
                 name = c.get("name")
                 args = c.get("arguments") or {}
+            else:
+                continue
+                
+            if t in ("tool_call", "tool_use"):
                 if isinstance(args, str):
                     try:
                         args = json.loads(args)
                     except Exception:
                         args = {"raw": args}
                 calls.append({"id": call_id, "name": name, "arguments": args})
+                
     # Pattern 2: some SDKs expose .tool_calls
     for c in getattr(resp, "tool_calls", []) or []:
-        args = c.get("arguments") or {}
+        if hasattr(c, 'arguments'):
+            args = c.arguments or {}
+            call_id = getattr(c, 'id', None) or getattr(c, 'tool_call_id', None) or ""
+            name = getattr(c, 'name', None)
+        elif isinstance(c, dict):
+            args = c.get("arguments") or {}
+            call_id = c.get("id") or c.get("tool_call_id") or ""
+            name = c.get("name")
+        else:
+            continue
+            
         if isinstance(args, str):
             try:
                 args = json.loads(args)
             except Exception:
                 args = {"raw": args}
-        calls.append({"id": c.get("id") or c.get("tool_call_id") or "", "name": c.get("name"), "arguments": args})
+        calls.append({"id": call_id, "name": name, "arguments": args})
     return calls
 
 # === Critique pass (two-step refinement) ===
@@ -1064,8 +1092,19 @@ async def ask_o3(user_prompt: str, composed_context: str, effort: str = "high") 
     try:
         parts = []
         for item in getattr(resp, "output", []) or []:
-            if isinstance(item, dict):
-                for c in item.get("content", []) or []:
+            # Handle both dict-like and object-like items
+            content_list = []
+            if hasattr(item, 'content'):
+                content_list = item.content or []
+            elif isinstance(item, dict):
+                content_list = item.get("content", []) or []
+                
+            for c in content_list:
+                # Handle both dict-like and object-like content items
+                if hasattr(c, 'type') and hasattr(c, 'text'):
+                    if c.type == "output_text" and c.text:
+                        parts.append(c.text)
+                elif isinstance(c, dict):
                     if c.get("type") == "output_text" and c.get("text"):
                         parts.append(c["text"])            
         return "".join(parts) or json.dumps(resp.model_dump() if hasattr(resp, "model_dump") else resp, indent=2)
@@ -1140,9 +1179,21 @@ async def ask_o3_bd(
             return text
         parts: List[str] = []
         for item in getattr(r, "output", []) or []:
-            for c in item.get("content", []) or []:
-                if c.get("type") in ("output_text", "message_text") and c.get("text"):
-                    parts.append(c["text"])
+            # Handle both dict-like and object-like items
+            content_list = []
+            if hasattr(item, 'content'):
+                content_list = item.content or []
+            elif isinstance(item, dict):
+                content_list = item.get("content", []) or []
+                
+            for c in content_list:
+                # Handle both dict-like and object-like content items
+                if hasattr(c, 'type') and hasattr(c, 'text'):
+                    if c.type in ("output_text", "message_text") and c.text:
+                        parts.append(c.text)
+                elif isinstance(c, dict):
+                    if c.get("type") in ("output_text", "message_text") and c.get("text"):
+                        parts.append(c["text"])
         return "".join(parts)
 
     first_text = _collect_text(resp)
@@ -3053,9 +3104,21 @@ async def api_debug_responses_test() -> JSONResponse:
             # Try alternative extraction
             parts = []
             for item in getattr(resp, "output", []) or []:
-                for c in item.get("content", []) or []:
-                    if c.get("type") in ("output_text", "message_text") and c.get("text"):
-                        parts.append(c["text"])
+                # Handle both dict-like and object-like items
+                content_list = []
+                if hasattr(item, 'content'):
+                    content_list = item.content or []
+                elif isinstance(item, dict):
+                    content_list = item.get("content", []) or []
+                    
+                for c in content_list:
+                    # Handle both dict-like and object-like content items
+                    if hasattr(c, 'type') and hasattr(c, 'text'):
+                        if c.type in ("output_text", "message_text") and c.text:
+                            parts.append(c.text)
+                    elif isinstance(c, dict):
+                        if c.get("type") in ("output_text", "message_text") and c.get("text"):
+                            parts.append(c["text"])
             output_text = "".join(parts)
         
         return JSONResponse({
